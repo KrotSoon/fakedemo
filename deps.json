@@ -1,5 +1,5 @@
 {
-  "repo": "OWNER/fakedemo",
+  "repo": "KrotSoon/fakedemo",
   "release": "deps-1",
   "items": [
     { "name": "Metamod:Source", "version": "2.0.0-git1483", "file": "mmsource-2.0.0-git1483-windows.zip",
