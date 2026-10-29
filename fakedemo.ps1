@@ -47,8 +47,7 @@ function Default-Settings {
     SteamAccount  = ""        # userdata folder id (account id); empty = most recently used
     Plugins       = $true     # FakeMimic + CS2-Bot-Controller (needs -insecure)
     FakeDirector  = $true     # take log add-on for FakeMimic
-    ExecFd        = $true     # +exec fd on start
-    Map           = "de_mirage"
+    ExecFd        = $true     # +exec fd on start (the game stays in the main menu)
     LaunchOptions = "-novid"
     NetconPort    = 0         # 0 = off; HLAE tools use 2121
     NetconPassword = ""
@@ -315,7 +314,6 @@ function Launch-Args($s) {
   }
   if ($s.LaunchOptions) { $a += ($s.LaunchOptions -split '\s+' | Where-Object { $_ }) }
   if ($s.ExecFd) { $a += "+exec", "fd" }
-  if ($s.Map) { $a += "+map", $s.Map }
   $a
 }
 

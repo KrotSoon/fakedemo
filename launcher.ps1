@@ -302,8 +302,6 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           </StackPanel>
         </Border>
 
-        <TextBlock Style="{StaticResource Caption}" Text="Карта"/>
-        <WrapPanel x:Name="Maps" Margin="0,-6,0,0"/>
 
         <Border x:Name="StatusCard" Style="{StaticResource Card}" Margin="0,14,0,0">
           <DockPanel>
@@ -343,7 +341,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
             <CheckBox x:Name="SwExecFd" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
             <StackPanel>
               <TextBlock Style="{StaticResource Label}" Text="exec fd при запуске"/>
-              <TextBlock Style="{StaticResource Hint}" Text="GOTV и режим custom включаются сами, карта грузится сразу"/>
+              <TextBlock Style="{StaticResource Hint}" Text="GOTV и режим custom включаются сразу, в главном меню"/>
             </StackPanel>
           </DockPanel>
         </Border>
@@ -382,9 +380,6 @@ $script:update = $null      # newer release found by the background check
 $script:loading = $true     # controls are being filled: their change events are not user choices
 
 (El "Brand").Text = "F A K E D E M O    $Version"
-
-$Maps = [ordered]@{ "" = "Меню"; "de_mirage" = "Mirage"; "de_inferno" = "Inferno"; "de_dust2" = "Dust II"; "de_nuke" = "Nuke";
-                    "de_ancient" = "Ancient"; "de_anubis" = "Anubis"; "de_train" = "Train"; "de_overpass" = "Overpass" }
 
 function Save { if (-not $script:loading) { Save-Settings $script:s } }
 
@@ -427,16 +422,6 @@ function Add-Chip($panel, [string]$group, [string]$text, [string]$value, [bool]$
   $c
 }
 
-function Fill-Maps {
-  $p = El "Maps"; $p.Children.Clear()
-  $all = [ordered]@{}; foreach ($k in $Maps.Keys) { $all[$k] = $Maps[$k] }
-  if ($script:s.Map -and -not $all.Contains($script:s.Map)) { $all[$script:s.Map] = $script:s.Map }   # typed in settings.json
-  foreach ($k in $all.Keys) {
-    $c = Add-Chip $p "map" $all[$k] $k ($script:s.Map -eq $k)
-    $c.Add_Checked({ param($sender) $script:s.Map = $sender.Tag; Save; Update-Summary })
-  }
-}
-
 function Fill-Accounts {
   $p = El "Accounts"; $p.Children.Clear()
   $cur = (Pick-AccountSafe).Id
@@ -463,7 +448,7 @@ function Load-Controls {
   (El "TbOptions").Text = $s.LaunchOptions
   (El "TbPort").Text = [string]$s.NetconPort
   (El "TbPass").Text = $s.NetconPassword
-  Fill-Maps; Fill-Accounts
+  Fill-Accounts
   $script:loading = $false
   Update-Summary
 }
@@ -473,10 +458,7 @@ function Update-Summary {
   $s = $script:s
   (El "SwDirector").IsEnabled = [bool]$s.Plugins
   (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
-  $map = "главное меню"
-  if ($s.Map -and $s.ExecFd) { $map = $(if ($Maps[$s.Map]) { $Maps[$s.Map] } else { $s.Map }) }
-  (El "PlaySub").Text = "$map · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
-  (El "Maps").IsEnabled = [bool]$s.ExecFd
+  (El "PlaySub").Text = "главное меню · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
 }
 
 function Show-Screen([string]$name) {
@@ -591,7 +573,7 @@ function Refresh {
 
 # ---------------- events ----------------
 
-(El "Header").Add_MouseLeftButtonDown({ $win.DragMove() })
+(El "Header").Add_MouseLeftButtonDown({ try { $win.DragMove() } catch { } })   # throws if the button is already up
 (El "BtnClose").Add_Click({ $win.Close() })
 (El "BtnGear").Add_Click({ Show-Screen $(if ((El "Main").Visibility -eq "Visible") { "settings" } else { "main" }) })
 (El "BtnBack").Add_Click({ Show-Screen "main" })
@@ -639,9 +621,20 @@ $win.Add_Loaded({
   (El "TbCs2").ScrollToHorizontalOffset([double]::MaxValue)   # the end of a long path is the useful part
 })
 
+# any error left in a handler: logged and shown, the window stays (an unhandled one would close it)
+$win.Dispatcher.Add_UnhandledException({
+  param($sender, $e)
+  $e.Handled = $true
+  try {
+    New-Item -ItemType Directory -Force $Data | Out-Null
+    Add-Content (Join-Path $Data "launcher-error.log") "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $($e.Exception)" -Encoding UTF8
+    Show-Error "Ошибка: $($e.Exception.Message) (подробно в launcher-error.log)"
+  } catch { }
+})
+
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(1000)
-$timer.Add_Tick({ Refresh })
+$timer.Add_Tick({ try { Refresh } catch { Show-Error $_.Exception.Message } })
 $timer.Start()
 
 Load-Controls
