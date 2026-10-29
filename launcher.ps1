@@ -275,6 +275,8 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
       <!-- ===== main ===== -->
       <StackPanel x:Name="Main">
+        <!-- the Grid slides in with the screen; the button keeps its own scale for the hover spring -->
+        <Grid>
         <Button x:Name="BtnPlay" Style="{StaticResource Play}" ToolTip="Enter">
           <Button.RenderTransform><ScaleTransform/></Button.RenderTransform>
           <StackPanel>
@@ -282,6 +284,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
             <TextBlock x:Name="PlaySub" FontSize="12" Foreground="#B011141A" HorizontalAlignment="Center"/>
           </StackPanel>
         </Button>
+        </Grid>
 
         <Border Style="{StaticResource Card}" Margin="0,14,0,0">
           <StackPanel>
@@ -399,14 +402,11 @@ function Animate-In($panel) {
   $i = 0
   foreach ($c in $panel.Children) {
     if ($c.Visibility -ne "Visible") { continue }
-    $t = New-Object Windows.Media.TranslateTransform
-    if ($c -is [Windows.Controls.Button] -and $c.RenderTransform -is [Windows.Media.ScaleTransform]) {
-      $g = New-Object Windows.Media.TransformGroup; $g.Children.Add($c.RenderTransform); $g.Children.Add($t)
-      $c.RenderTransform = $g
-    } elseif (-not ($c.RenderTransform -is [Windows.Media.TransformGroup])) { $c.RenderTransform = $t }
-    else { $t = $c.RenderTransform.Children[1] }
+    if (-not ($c.RenderTransform -is [Windows.Media.TranslateTransform])) { $c.RenderTransform = New-Object Windows.Media.TranslateTransform }
+    # hidden and shifted until its own turn comes: before BeginTime an animation shows the base value
+    $c.Opacity = 0; $c.RenderTransform.X = -30
     $c.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 220 (40 * $i)))
-    $t.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -30 0 380 (40 * $i) 0.6))
+    $c.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -30 0 380 (40 * $i) 0.6))
     $i++
   }
 }
