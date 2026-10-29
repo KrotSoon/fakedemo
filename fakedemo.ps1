@@ -6,6 +6,7 @@
 #   fakedemo.ps1 status      what is installed where
 #   fakedemo.ps1 cfg         copy configs and rebuild fd_unfake.cfg from your Steam binds
 #   fakedemo.ps1 update      download the newest release from GitHub over this folder
+#   fakedemo.ps1 previews    download workshop map previews (launcher, in background)
 #   fakedemo.ps1 check       write the newest release to Documents\FakeDemo\latest.json (launcher, in background)
 #   fakedemo.ps1 uninstall   plugins off and configs removed from CS2
 #   fakedemo.ps1 migrate -From <old fakedemo folder>   move old recordings / takes to Documents\FakeDemo
@@ -31,7 +32,8 @@ $MetamodLine = "`t`t`tGame`tcsgo/addons/metamod"
 $LegacyPaths = "panorama\layout\custom_game\fm_menu.vxml_c", "panorama\styles\custom_game\fm_menu.vcss_c",
   "addons\metamod", "addons\counterstrikesharp", "addons\BotController", "addons\metamod.vdf", "addons\metamod_x64.vdf"
 $OwnTrees = "addons\metamod", "addons\counterstrikesharp", "addons\BotController"
-$CfgFiles = "fd.cfg", "fd_actions.cfg", "fd_blank.cfg", "fd_fake.cfg", "fd_help.cfg", "fd_user.cfg", "fd_unfake.cfg", "gamemode_custom_server.cfg"
+$CfgFiles = "fd.cfg", "fd_actions.cfg", "fd_blank.cfg", "fd_fake.cfg", "fd_help.cfg", "fd_user.cfg", "fd_unfake.cfg", "gamemode_custom_server.cfg",
+  "fd_ws.cfg", "fd_ws_list.cfg"
 
 function Log([string]$m) {
   Write-Host $m
@@ -48,6 +50,8 @@ function Default-Settings {
     Plugins       = $true     # FakeMimic + CS2-Bot-Controller (needs -insecure)
     FakeDirector  = $true     # take log add-on for FakeMimic
     ExecFd        = $true     # +exec fd on start (the game stays in the main menu)
+    WorkshopMap   = ""        # workshop item id to load right away; empty = main menu
+    WorkshopTitle = ""
     LaunchOptions = "-novid"
     NetconPort    = 0         # 0 = off; HLAE tools use 2121
     NetconPassword = ""
@@ -164,8 +168,98 @@ function Install-Cfg($s) {
     [IO.File]::WriteAllText((Join-Path $cfg $f.Name), $text)
   }
   Log "configs $Version copied to $cfg"
+  try { Write-WsCfg $s $cfg } catch { Log "WARNING workshop map list not written: $($_.Exception.Message)" }
   # binds are not worth blocking the game for: the previous fd_unfake.cfg stays
   try { Build-Unfake $s (Join-Path $cfg "fd_unfake.cfg") } catch { Log "WARNING fd_unfake.cfg not rebuilt: $($_.Exception.Message)" }
+}
+
+# ---------------- workshop maps ----------------
+
+# map names in a VPK directory: entries maps/<name>.vpk -> size (the biggest one is the map, others are its 3D sky)
+function Vpk-Maps([string]$file) {
+  $fs = [IO.File]::OpenRead($file)
+  try {
+    $br = New-Object IO.BinaryReader $fs
+    if ($br.ReadUInt32() -ne 0x55AA1234) { return @{} }
+    $ver = $br.ReadUInt32(); $size = $br.ReadUInt32()
+    if ($ver -eq 2) { [void]$br.ReadBytes(16) }
+    $t = $br.ReadBytes($size)
+  } finally { $fs.Dispose() }
+  # tree: extension { path { name, 18-byte entry, preload bytes } }, every list ends with an empty string
+  $u = [Text.Encoding]::UTF8; $maps = @{}; $p = 0
+  while ($true) {
+    $e = [Array]::IndexOf($t, [byte]0, $p); $ext = $u.GetString($t, $p, $e - $p); $p = $e + 1
+    if (-not $ext) { break }
+    while ($true) {
+      $e = [Array]::IndexOf($t, [byte]0, $p); $path = $u.GetString($t, $p, $e - $p); $p = $e + 1
+      if (-not $path) { break }
+      while ($true) {
+        $e = [Array]::IndexOf($t, [byte]0, $p); $name = $u.GetString($t, $p, $e - $p); $p = $e + 1
+        if (-not $name) { break }
+        $pre = [BitConverter]::ToUInt16($t, $p + 4)
+        if ($ext -eq "vpk" -and $path -eq "maps" -and $name -notmatch 'skybox|3dsky') { $maps[$name] = [BitConverter]::ToUInt32($t, $p + 12) + $pre }
+        $p += 18 + $pre
+      }
+    }
+  }
+  $maps
+}
+
+# subscribed CS2 workshop items that hold a map: Id, Title, Map (the name the console knows), Preview file
+function Workshop-Maps($s) {
+  if (-not $s.Cs2Path) { return }
+  $root = [IO.Path]::GetFullPath((Join-Path $s.Cs2Path "..\..\workshop\content\730"))
+  if (-not (Test-Path $root)) { return }
+  foreach ($d in Get-ChildItem $root -Directory) {
+    # CS:GO leftovers are .bin files without a vpk
+    $f = @(Get-ChildItem $d.FullName -Filter "*_dir.vpk") + @(Get-ChildItem $d.FullName -Filter "$($d.Name).vpk") | Select-Object -First 1
+    if (-not $f) { continue }
+    $maps = try { Vpk-Maps $f.FullName } catch { @{} }
+    if (-not $maps.Count) { continue }   # asset packs
+    $map = ($maps.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1).Key
+    $title = $map
+    $pd = Join-Path $d.FullName "publish_data.txt"
+    if ((Test-Path $pd) -and ((Get-Content $pd -Raw -Encoding UTF8) -match '"title"\s+"([^"]+)"')) { $title = $Matches[1] }
+    [pscustomobject]@{ Id = $d.Name; Title = $title; Map = $map; Preview = Join-Path $Data "ws\$($d.Name).img" }
+  }
+}
+
+# fd_ws.cfg: ws = numbered list, ws1 ws2 ... = exec fd + that map (fd.cfg execs this file)
+function Write-WsCfg($s, [string]$cfg) {
+  $maps = @(Workshop-Maps $s | Sort-Object Title)
+  $alias = @("// fd_ws.cfg - generated by FakeDemo $Version from your subscribed workshop maps",
+             "// ws = list, ws1 ws2 ... = load that map (exec fd first, so the fake settings apply)")
+  $list = @('echo ""', 'echo "==================== WORKSHOP MAPS ===================="')
+  $i = 0
+  foreach ($m in $maps) {
+    $i++
+    $alias += "alias ws$i `"exec fd; host_workshop_map $($m.Id)`""
+    $list += "echo `"  ws$i   $($m.Title -replace '[";]', "'")   ($($m.Map))`""
+  }
+  if (-not $i) { $list += 'echo "  none: subscribe to a map in the Steam Workshop"' }
+  $list += 'echo "  type ws<number>, e.g. ws1"', 'echo ""'
+  $alias += 'alias ws "exec fd_blank; exec fd_ws_list"'
+  [IO.File]::WriteAllLines((Join-Path $cfg "fd_ws.cfg"), [string[]]$alias)
+  [IO.File]::WriteAllLines((Join-Path $cfg "fd_ws_list.cfg"), [string[]]$list)
+}
+
+# preview pictures from the Steam Workshop (public API, no key) into Documents\FakeDemo\ws\<id>.img
+function Fetch-Previews($s) {
+  $dir = Join-Path $Data "ws"
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  $need = @(Workshop-Maps $s | Where-Object { -not (Test-Path $_.Preview) })
+  if (-not $need) { return }
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  $body = "itemcount=$($need.Count)"
+  for ($i = 0; $i -lt $need.Count; $i++) { $body += "&publishedfileids[$i]=$($need[$i].Id)" }
+  $r = Invoke-RestMethod -Method Post -Uri "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/" -Body $body -ContentType "application/x-www-form-urlencoded"
+  $web = New-Object Net.WebClient
+  foreach ($x in $r.response.publishedfiledetails) {
+    if (-not $x.preview_url) { continue }
+    $dst = Join-Path $dir "$($x.publishedfileid).img"
+    # .part first: the launcher never reads half a file
+    try { $web.DownloadFile($x.preview_url, "$dst.part"); Move-Item "$dst.part" $dst -Force } catch { }
+  }
 }
 
 # ---------------- plugins ----------------
@@ -313,7 +407,9 @@ function Launch-Args($s) {
     if ($s.NetconPassword) { $a += "-netconpassword", $s.NetconPassword }
   }
   if ($s.LaunchOptions) { $a += ($s.LaunchOptions -split '\s+' | Where-Object { $_ }) }
-  if ($s.ExecFd) { $a += "+exec", "fd" }
+  # a workshop map needs the custom mode from exec fd, or fd_fake.cfg does not run on it
+  if ($s.ExecFd -or $s.WorkshopMap) { $a += "+exec", "fd" }
+  if ($s.WorkshopMap) { $a += "+host_workshop_map", $s.WorkshopMap }
   $a
 }
 
@@ -399,6 +495,7 @@ if ($MyInvocation.InvocationName -ne '.') {
       "cfg"       { Install-Cfg $s }
       "status"    { Status $s | Format-List }
       "update"    { Update }
+      "previews"  { Fetch-Previews $s }
       # for the launcher: newest release into latest.json (no file = no answer)
       "check"     { $r = Latest-Release; $r | ConvertTo-Json | Set-Content (Join-Path $Data "latest.json") -Encoding UTF8 }
       "uninstall" { Plugins-Off $s; foreach ($f in $CfgFiles) { $p = Join-Path (Csgo $s) "cfg\$f"; if (Test-Path $p) { Remove-Item $p } }; Log "FakeDemo removed from CS2 (your data stays in $Data)" }

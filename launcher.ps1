@@ -257,6 +257,66 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="Margin" Value="2,12,0,4"/>
     </Style>
+    <!-- thin scrollbar: just a soft thumb, no arrows -->
+    <Style TargetType="ScrollBar">
+      <Setter Property="Width" Value="6"/>
+      <Setter Property="MinWidth" Value="6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Track x:Name="PART_Track" IsDirectionReversed="True">
+              <Track.Thumb>
+                <Thumb>
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                      <Border x:Name="t" CornerRadius="3" Background="#30FFFFFF"/>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="t" Property="Background" Value="#E4AE39"/></Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
+              </Track.Thumb>
+            </Track>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- a card you can click (the chosen map on the main screen) -->
+    <Style x:Key="ClickCard" TargetType="Border" BasedOn="{StaticResource Card}">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1CE4AE39"/></Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- a map in the picker: preview, title, map name; gold frame on hover and when chosen (Tag="on") -->
+    <Style x:Key="Tile" TargetType="Button">
+      <Setter Property="Width" Value="176"/>
+      <Setter Property="Margin" Value="0,0,8,8"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="12" Background="#0DFFFFFF" BorderBrush="Transparent" BorderThickness="1.5" Padding="6">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#1CE4AE39"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#80E4AE39"/>
+              </Trigger>
+              <Trigger Property="Tag" Value="on">
+                <Setter TargetName="bg" Property="BorderBrush" Value="#E4AE39"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
 
   <Border x:Name="Panel" Margin="24" CornerRadius="20" Background="#F2161A22" BorderBrush="#2AFFFFFF" BorderThickness="1"
@@ -306,6 +366,20 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         </Border>
 
 
+        <Border x:Name="MapCard" Style="{StaticResource ClickCard}" Padding="10" ToolTip="Выбрать карту из мастерской">
+          <DockPanel>
+            <Button x:Name="BtnMapClear" DockPanel.Dock="Right" Style="{StaticResource Tool}" Content="&#x2715;" Width="30" Height="30"
+                    VerticalAlignment="Center" ToolTip="Без карты: главное меню"/>
+            <Border x:Name="MapThumb" Width="80" Height="45" CornerRadius="8" Background="#14FFFFFF" Margin="0,0,12,0">
+              <TextBlock x:Name="MapGlyph" Text="&#x2630;" FontSize="18" Foreground="#80FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock x:Name="MapTitle" Style="{StaticResource Label}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock x:Name="MapHint" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
         <Border x:Name="StatusCard" Style="{StaticResource Card}" Margin="0,14,0,0">
           <DockPanel>
             <Button x:Name="BtnOff" DockPanel.Dock="Right" Style="{StaticResource Small}" Tag="danger" Content="Снять плагины"
@@ -321,6 +395,23 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         <DockPanel Margin="-6,8,-6,0">
           <Button x:Name="BtnUpdate" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Проверить обновления"/>
           <Button x:Name="BtnFolder" Style="{StaticResource Link}" Content="Папка записей" HorizontalAlignment="Left"/>
+        </DockPanel>
+      </StackPanel>
+
+      <!-- ===== map picker ===== -->
+      <StackPanel x:Name="Picker" Visibility="Collapsed">
+        <Grid>
+          <TextBox x:Name="TbSearch" Style="{StaticResource Field}"/>
+          <TextBlock x:Name="SearchHint" Text="&#x2315;  Поиск по названию" IsHitTestVisible="False" Foreground="#60FFFFFF"
+                     FontSize="14" Margin="12,0,0,0" VerticalAlignment="Center"/>
+        </Grid>
+        <ScrollViewer x:Name="PickScroll" Margin="0,10,-8,0" Height="430" VerticalScrollBarVisibility="Auto" Focusable="False">
+          <WrapPanel x:Name="PickList"/>
+        </ScrollViewer>
+        <TextBlock x:Name="PickEmpty" Style="{StaticResource Hint}" Margin="2,4,0,0" Visibility="Collapsed"/>
+        <DockPanel Margin="-6,8,-6,0">
+          <Button x:Name="BtnWorkshop" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Открыть мастерскую"/>
+          <Button x:Name="BtnPickBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
         </DockPanel>
       </StackPanel>
 
@@ -381,6 +472,8 @@ $script:proc = $null        # running 'fakedemo.ps1 play'
 $script:updProc = $null     # running 'fakedemo.ps1 update'
 $script:update = $null      # newer release found by the background check
 $script:loading = $true     # controls are being filled: their change events are not user choices
+$script:tiles = @{}         # picker tile button -> map, thumbnail
+$script:prevProc = $null    # running 'fakedemo.ps1 previews'
 
 (El "Brand").Text = "F A K E D E M O    $Version"
 
@@ -398,7 +491,7 @@ function Anim([double]$from, [double]$to, [int]$ms, [int]$delay = 0, [double]$bo
 }
 
 # blocks of a screen arrive one after another with a little bounce, like the FakeMimic menu rows
-function Animate-In($panel) {
+function Animate-In($panel, [int]$step = 40, [int]$cap = 99) {
   $i = 0
   foreach ($c in $panel.Children) {
     if ($c.Visibility -ne "Visible") { continue }
@@ -408,8 +501,9 @@ function Animate-In($panel) {
     $c.BeginAnimation([Windows.UIElement]::OpacityProperty, $null)
     $c.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, $null)
     $c.Opacity = 0; $c.RenderTransform.X = -30
-    $c.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 220 (40 * $i)))
-    $c.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -30 0 380 (40 * $i) 0.6))
+    $delay = $step * [Math]::Min($i, $cap)
+    $c.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 220 $delay))
+    $c.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -30 0 380 $delay 0.6))
     $i++
   }
 }
@@ -461,15 +555,127 @@ function Update-Summary {
   $s = $script:s
   (El "SwDirector").IsEnabled = [bool]$s.Plugins
   (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
-  (El "PlaySub").Text = "главное меню · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
+  $where = if ($s.WorkshopMap) { $s.WorkshopTitle } else { "главное меню" }
+  (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
+  Update-MapCard
 }
 
+$Screens = [ordered]@{ "main" = @("Main", "Fake demo"); "settings" = @("Settings", "Настройки"); "picker" = @("Picker", "Карта") }
+
 function Show-Screen([string]$name) {
-  $main = $name -eq "main"
-  (El "Main").Visibility = $(if ($main) { "Visible" } else { "Collapsed" })
-  (El "Settings").Visibility = $(if ($main) { "Collapsed" } else { "Visible" })
-  (El "Title").Text = $(if ($main) { "Fake demo" } else { "Настройки" })
-  Animate-In (El $(if ($main) { "Main" } else { "Settings" }))
+  foreach ($k in $Screens.Keys) { (El $Screens[$k][0]).Visibility = $(if ($k -eq $name) { "Visible" } else { "Collapsed" }) }
+  (El "Title").Text = $Screens[$name][1]
+  Animate-In (El $Screens[$name][0])
+  if ($name -eq "picker") { Animate-In (El "PickList") 25 8 }
+}
+
+function Screen { foreach ($k in $Screens.Keys) { if ((El $Screens[$k][0]).Visibility -eq "Visible") { return $k } } }
+
+# ---------------- workshop maps ----------------
+
+# a picture as a brush that fills a rounded Border; decoded small, file not kept open
+function Image-Brush([string]$path) {
+  if (-not (Test-Path $path)) { return $null }
+  try {
+    $bi = New-Object Windows.Media.Imaging.BitmapImage
+    $bi.BeginInit()
+    $bi.UriSource = New-Object Uri $path
+    $bi.CacheOption = "OnLoad"; $bi.CreateOptions = "IgnoreImageCache"; $bi.DecodePixelWidth = 360
+    $bi.EndInit(); $bi.Freeze()
+    $b = New-Object Windows.Media.ImageBrush $bi
+    $b.Stretch = "UniformToFill"
+    $b
+  } catch { $null }
+}
+
+function Preview-Path([string]$id) { Join-Path $Data "ws\$id.img" }
+
+function Update-MapCard {
+  $s = $script:s
+  $chosen = [bool]$s.WorkshopMap
+  (El "MapTitle").Text = $(if ($chosen) { $s.WorkshopTitle } else { "Главное меню" })
+  (El "MapHint").Text = $(if ($chosen) { "сразу на карту из мастерской" } else { "нажми, чтобы выбрать карту из мастерской" })
+  (El "BtnMapClear").Visibility = $(if ($chosen) { "Visible" } else { "Collapsed" })
+  $brush = if ($chosen) { Image-Brush (Preview-Path $s.WorkshopMap) } else { $null }
+  (El "MapThumb").Background = $(if ($brush) { $brush } else { "#14FFFFFF" })
+  (El "MapGlyph").Visibility = $(if ($brush) { "Collapsed" } else { "Visible" })
+  (El "MapGlyph").Text = $(if ($chosen) { [char]0x25A6 } else { [char]0x2630 })
+}
+
+function Choose-Map($m) {
+  $script:s.WorkshopMap = $(if ($m) { $m.Id } else { "" })
+  $script:s.WorkshopTitle = $(if ($m) { $m.Title } else { "" })
+  Save; Update-Summary
+}
+
+# one tile: preview (or the map name while it downloads), title, console name
+function New-Tile($m) {
+  $b = New-Object Windows.Controls.Button
+  $b.Style = $win.Resources["Tile"]
+  $b.RenderTransform = New-Object Windows.Media.TranslateTransform
+  $sp = New-Object Windows.Controls.StackPanel
+  $thumb = New-Object Windows.Controls.Border
+  $thumb.Height = 92; $thumb.CornerRadius = 8; $thumb.Background = "#14FFFFFF"
+  $glyph = New-Object Windows.Controls.TextBlock
+  $glyph.Foreground = "#60FFFFFF"; $glyph.FontSize = 12; $glyph.HorizontalAlignment = "Center"; $glyph.VerticalAlignment = "Center"
+  $glyph.Text = $(if ($m) { $m.Map } else { [string][char]0x2630 })
+  if (-not $m) { $glyph.FontSize = 26 }
+  $thumb.Child = $glyph
+  $t = New-Object Windows.Controls.TextBlock
+  $t.Text = $(if ($m) { $m.Title } else { "Главное меню" }); $t.Foreground = "#E8E8EC"; $t.FontSize = 13
+  $t.Margin = "2,7,2,0"; $t.TextTrimming = "CharacterEllipsis"
+  $h = New-Object Windows.Controls.TextBlock
+  $h.Text = $(if ($m) { $m.Map } else { "без карты" }); $h.Foreground = "#70FFFFFF"; $h.FontSize = 11
+  $h.Margin = "2,1,2,1"; $h.TextTrimming = "CharacterEllipsis"
+  [void]$sp.Children.Add($thumb); [void]$sp.Children.Add($t); [void]$sp.Children.Add($h)
+  $b.Content = $sp
+  $id = $(if ($m) { $m.Id } else { "" })
+  if ($id -eq [string]$script:s.WorkshopMap) { $b.Tag = "on" }
+  $script:tiles[$b] = [pscustomobject]@{ Map = $m; Thumb = $thumb; Glyph = $glyph; Search = $(if ($m) { "$($m.Title) $($m.Map)".ToLower() } else { "" }) }
+  $b.Add_Click({ param($sender) Choose-Map $script:tiles[$sender].Map; Show-Screen "main" })
+  Set-TileImage $script:tiles[$b]
+  $b
+}
+
+function Set-TileImage($tile) {
+  if (-not $tile.Map -or $tile.HasImage) { return }
+  $brush = Image-Brush $tile.Map.Preview
+  if (-not $brush) { return }
+  $tile.Thumb.Background = $brush; $tile.Glyph.Visibility = "Collapsed"
+  $tile | Add-Member -Force HasImage $true
+  $tile.Thumb.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 300))
+}
+
+function Open-Picker {
+  $list = El "PickList"; $list.Children.Clear()
+  $script:tiles = @{}
+  $maps = @(Workshop-Maps $script:s | Sort-Object Title)
+  [void]$list.Children.Add((New-Tile $null))
+  foreach ($m in $maps) { [void]$list.Children.Add((New-Tile $m)) }
+  (El "TbSearch").Text = ""
+  (El "PickEmpty").Visibility = "Collapsed"
+  if (-not $maps) { Show-PickEmpty "Нет подписанных карт. Подпишись на карту в мастерской Steam, Steam её скачает, и она появится здесь" }
+  (El "PickScroll").ScrollToTop()
+  Show-Screen "picker"
+  if (@($maps | Where-Object { -not (Test-Path $_.Preview) }).Count -and -not ($script:prevProc -and -not $script:prevProc.HasExited)) {
+    $script:prevProc = Run-Hidden "previews"
+  }
+  (El "TbSearch").Focus() | Out-Null
+}
+
+function Show-PickEmpty([string]$m) { $e = El "PickEmpty"; $e.Text = $m; $e.Visibility = $(if ($m) { "Visible" } else { "Collapsed" }) }
+
+function Filter-Picker {
+  $q = (El "TbSearch").Text.Trim().ToLower()
+  (El "SearchHint").Visibility = $(if ($q) { "Collapsed" } else { "Visible" })
+  $shown = 0
+  foreach ($b in (El "PickList").Children) {
+    $tile = $script:tiles[$b]
+    $ok = -not $q -or ($tile.Map -and $tile.Search.Contains($q))
+    $b.Visibility = $(if ($ok) { "Visible" } else { "Collapsed" })
+    if ($ok -and $tile.Map) { $shown++ }
+  }
+  if ($q -and -not $shown) { Show-PickEmpty "Ничего не найдено по «$q»" } elseif ($q) { Show-PickEmpty "" }
 }
 
 # ---------------- actions ----------------
@@ -572,6 +778,11 @@ function Refresh {
     } else { Show-Error (Get-Content $LogFile -Tail 1 -Encoding UTF8); $script:updProc = $null }
   }
   Read-Check
+  # previews arrive from the background download
+  if ($script:prevProc) {
+    if ((El "Picker").Visibility -eq "Visible") { foreach ($t in $script:tiles.Values) { Set-TileImage $t } }
+    if ($script:prevProc.HasExited) { $script:prevProc = $null; Update-MapCard }
+  }
 }
 
 # ---------------- events ----------------
@@ -580,7 +791,13 @@ function Refresh {
 # handle their own clicks, so this only gets what nobody took); DragMove throws if the button is already up
 (El "Panel").Add_MouseLeftButtonDown({ try { $win.DragMove() } catch { } })
 (El "BtnClose").Add_Click({ $win.Close() })
-(El "BtnGear").Add_Click({ Show-Screen $(if ((El "Main").Visibility -eq "Visible") { "settings" } else { "main" }) })
+(El "BtnGear").Add_Click({ Show-Screen $(if ((Screen) -eq "settings") { "main" } else { "settings" }) })
+(El "BtnPickBack").Add_Click({ Show-Screen "main" })
+(El "BtnWorkshop").Add_Click({ Start-Process "steam://openurl/https://steamcommunity.com/app/730/workshop/" })
+(El "TbSearch").Add_TextChanged({ Filter-Picker })
+(El "BtnMapClear").Add_Click({ Choose-Map $null })
+# on mouse down, and marked handled: otherwise the panel starts moving the window and eats the click
+(El "MapCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Picker } catch { Show-Error $_.Exception.Message } })
 (El "BtnBack").Add_Click({ Show-Screen "main" })
 (El "BtnPlay").Add_Click({ try { Start-Play } catch { Show-Error $_.Exception.Message } })
 (El "BtnOff").Add_Click({ try { Plugins-Off $script:s; Show-Info "Плагины сняты, CS2 чиста"; Refresh } catch { Show-Error $_.Exception.Message } })
@@ -611,11 +828,24 @@ function Refresh {
 # Enter = Play, Esc = back / close
 $win.Add_PreviewKeyDown({
   param($sender, $e)
+  if ($e.OriginalSource -eq (El "TbSearch")) {
+    # Enter takes the first map found, Esc clears the search, then leaves
+    if ($e.Key -eq "Enter") {
+      $first = (El "PickList").Children | Where-Object { $_.Visibility -eq "Visible" -and $script:tiles[$_].Map } | Select-Object -First 1
+      if ($first) { Choose-Map $script:tiles[$first].Map; Show-Screen "main" }
+      $e.Handled = $true; return
+    }
+    if ($e.Key -eq "Escape") {
+      if ((El "TbSearch").Text) { (El "TbSearch").Text = "" } else { Show-Screen "main" }
+      $e.Handled = $true; return
+    }
+    return
+  }
   if ($e.OriginalSource -is [Windows.Controls.TextBox]) {
     if ($e.Key -eq "Enter" -or $e.Key -eq "Escape") { [Windows.Input.Keyboard]::ClearFocus(); (El "Panel").Focus() | Out-Null; $e.Handled = $true }
     return
   }
-  if ($e.Key -eq "Escape") { if ((El "Main").Visibility -ne "Visible") { Show-Screen "main" } else { $win.Close() }; $e.Handled = $true }
+  if ($e.Key -eq "Escape") { if ((Screen) -ne "main") { Show-Screen "main" } else { $win.Close() }; $e.Handled = $true }
   elseif ($e.Key -eq "Enter" -and (El "Main").Visibility -eq "Visible") { Start-Play; $e.Handled = $true }
 })
 
@@ -623,6 +853,7 @@ $win.Add_Loaded({
   (El "Panel").BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 200))
   (El "PanelShift").BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -40 0 320 0 0.5))
   Start-Check
+  if ($script:s.WorkshopMap -and -not (Test-Path (Preview-Path $script:s.WorkshopMap))) { $script:prevProc = Run-Hidden "previews" }
   (El "TbCs2").ScrollToHorizontalOffset([double]::MaxValue)   # the end of a long path is the useful part
 })
 
@@ -644,7 +875,10 @@ $timer.Start()
 
 Load-Controls
 Refresh
-Show-Screen $(if ($script:s.Cs2Path -and $env:FAKEDEMO_SCREEN -ne "settings") { "main" } else { "settings" })
+if (-not $script:s.Cs2Path) { Show-Screen "settings" }
+elseif ($env:FAKEDEMO_SCREEN -eq "picker") { Open-Picker }
+elseif ($env:FAKEDEMO_SCREEN) { Show-Screen $env:FAKEDEMO_SCREEN }
+else { Show-Screen "main" }
 
 # FAKEDEMO_SNAPSHOT=<png>: render the window once the animations settled and quit (layout checks)
 if ($env:FAKEDEMO_SNAPSHOT) {
