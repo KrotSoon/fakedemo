@@ -874,13 +874,16 @@ function Refresh {
 (El "SwPlugins").Add_Click({ $script:s.Plugins = [bool](El "SwPlugins").IsChecked; Save; Update-Summary })
 (El "SwDirector").Add_Click({ $script:s.FakeDirector = [bool](El "SwDirector").IsChecked; Save })
 (El "SwExecFd").Add_Click({ $script:s.ExecFd = [bool](El "SwExecFd").IsChecked; Save; Update-Summary })
-(El "TbOptions").Add_LostFocus({ $script:s.LaunchOptions = (El "TbOptions").Text.Trim(); Save })
-(El "TbPass").Add_LostFocus({ $script:s.NetconPassword = (El "TbPass").Text.Trim(); Save })
-(El "TbPort").Add_LostFocus({
+# fields save on every change: going Back or pressing Play while still typing kept no lost focus,
+# and the value was gone
+(El "TbOptions").Add_TextChanged({ $script:s.LaunchOptions = (El "TbOptions").Text.Trim(); Save })
+(El "TbPass").Add_TextChanged({ $script:s.NetconPassword = (El "TbPass").Text.Trim(); Save })
+(El "TbPort").Add_TextChanged({
   $n = 0
   if ([int]::TryParse((El "TbPort").Text.Trim(), [ref]$n) -and $n -ge 0) { $script:s.NetconPort = $n; Save }
-  else { (El "TbPort").Text = [string]$script:s.NetconPort }
 })
+# a port that is not a number goes back to the saved one when the field is left
+(El "TbPort").Add_LostFocus({ (El "TbPort").Text = [string]$script:s.NetconPort })
 
 # Enter = Play, Esc = back / close
 $win.Add_PreviewKeyDown({
