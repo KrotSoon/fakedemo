@@ -1,4 +1,4 @@
-// FakeMimic - Bot Mimic for CS2 fake demos.
+﻿// FakeMimic - Bot Mimic for CS2 fake demos.
 // Records the local player and replays recordings on bots, all starting on the same tick,
 // so enemies come out exactly on time. Recording and replay run on CS2-Bot-Controller
 // (engine level: movement, view, buttons incl. shooting, subtick input); FakeMimic adds
@@ -404,7 +404,6 @@ public partial class FakeMimic : BasePlugin
 
     Menu? _menu;
     CCSCustomHudLayout? _hud;
-    bool _swapping;    // a pick is opening the next screen in the menu that is already on screen
     bool _swapB;
     Action<CCSPlayerController, string>? _awaitText;   // next chat line goes here (names)
 
@@ -448,15 +447,15 @@ public partial class FakeMimic : BasePlugin
             hud.SetHasClass($"b{i}", "Accent", i != 9 && item?.Accent == true);
         }
         ApplyMenuPrefs(hud);
-        if (_swapping || _settingsOpen) Swap(hud);
+        Swap(hud);   // replay the rows' entrance: opening and switching look the same
         _settingsOpen = false;
         hud.SetHasClass("menu", "Settings", false);
         hud.SetHasClass("menu", "Hidden", false);
         hud.SetInputCaptureEnabled(p, true);
     }
 
-    // Another screen in the open menu: the layout replays the rows' entrance (keyframes) whenever the
-    // class on #menu switches between SwapA and SwapB, in the same tick as the new texts.
+    // The layout replays the rows' entrance (keyframes) whenever the class on #menu switches between
+    // SwapA and SwapB, in the same tick as the new texts: on every opening and every screen change.
     void Swap(CCSCustomHudLayout hud)
     {
         _swapB = !_swapB;
@@ -596,12 +595,10 @@ public partial class FakeMimic : BasePlugin
         if (_menu == null) return;
         if (n == 9 || n > _menu.Items.Count) { if (n == 9 && _menu.Main) CloseMenu(p); return; }
         var item = _menu.Items[n - 1];
-        // the pick may open another screen (Show while _swapping animates the switch); if it does
+        // the pick may open another screen (Show keeps the menu and replays the entrance); if it does
         // not (an action, a name asked in chat), the menu closes
         _menu = null;
-        _swapping = true;
-        try { item.Pick(p); }
-        finally { _swapping = false; }
+        item.Pick(p);
         if (_menu == null) CloseMenu(p);
     }
 

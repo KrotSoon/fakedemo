@@ -7,6 +7,12 @@
     height: 100%;
 }
 
+/* Panorama clips every panel's children to its box: the menu sliding in from the left went past the
+   left edge of the position wrappers and a hovered row (+12px) past the right edge of the rows */
+.Root, #posx, #posy, #poss, .Rows, .SettingsPanel {
+    overflow: noclip;
+}
+
 #menu {
     width: 380px;
     height: fit-children;
@@ -48,7 +54,10 @@
     transition-duration: .38s;
     transition-timing-function: cubic-bezier(.2, 1.4, .35, 1);
 }
-#poss { transform-origin: 0% 0%; }
+/* a panel with a transform is still cut at its own box: the menu slides in from -40px, so the
+   innermost wrapper starts 60px further left and has the menu 60px inside (scaling around that point) */
+#posx { margin-left: -60px; }
+#poss { padding-left: 60px; transform-origin: 60px 0px; }
 #menu { horizontal-align: left; vertical-align: top; }
 #posx.X0 { transform: translateX(0px); }
 #posx.X1 { transform: translateX(48px); }
@@ -178,11 +187,13 @@
 .Header {
     width: 100%;
     flow-children: right;
-    margin: 0px 6px 14px 8px;
+    margin: 0px 6px 14px 0px;
 }
 
+/* the left 8px are padding, not the header's margin: the title nudges in from -8px inside this box */
 .Heading {
     width: fill-parent-flow(1);
+    padding-left: 8px;
     flow-children: down;
 }
 
@@ -295,19 +306,8 @@
     color: #ffffff;
 }
 
-/* rows arrive one after another with a little bounce when the menu opens */
-#menu.Hidden .Item {
-    opacity: 0;
-    transform: translateX(-30px);
-}
-#b2 { transition-delay: 0s, .035s, .035s; }
-#b3 { transition-delay: 0s, .07s, .07s; }
-#b4 { transition-delay: 0s, .105s, .105s; }
-#b5 { transition-delay: 0s, .14s, .14s; }
-#b6 { transition-delay: 0s, .175s, .175s; }
-#b7 { transition-delay: 0s, .21s, .21s; }
-#b8 { transition-delay: 0s, .245s, .245s; }
-#b9 { transition-delay: 0s, .28s, .28s; }
+/* the rows' entrance (on opening too) is the keyframe stagger at the end of the file; transition delays
+   here would also have delayed the hover of the lower rows */
 
 /* stop / delete */
 .Accent .ItemText { color: #ff8170; }
@@ -484,7 +484,7 @@
 .V40 .Fill { width: 320px; }
 .V40 .Knob { transform: translateX(320px); }
 
-/* ---- another screen in an open menu ----
+/* ---- rows arrive: on opening and on another screen in an open menu ----
    The plugin flips SwapA / SwapB in the same tick it changes the texts. A class with another
    animation name restarts the animation; fill-mode backwards keeps every row out of sight until its
    delay is over, so the new screen arrives with the opening stagger and the old one never fades out
@@ -501,7 +501,7 @@
     55% { opacity: 1; transform: translateX(4px); }
     100% { opacity: 1; transform: translateX(0px); }
 }
-/* the title only nudges: 24px would push it past the panel's left edge */
+/* the title only nudges (8px, the heading's padding): more would be cut at the heading's edge */
 @keyframes 'fm-title-a' {
     0% { opacity: 0; transform: translateX(-8px); }
     100% { opacity: 1; transform: translateX(0px); }
