@@ -441,6 +441,8 @@ function Plugins-Off($s) {
     # these trees are ours as a whole (on refuses to install over foreign ones); CSS also writes
     # logs and plugin configs into them that are not in the manifest
     foreach ($d in $OwnTrees) { $p = Join-Path $csgo $d; if (Test-Path $p) { Remove-Item $p -Recurse -Force } }
+    # menu builds left by layout development (toolsuild_hud.ps1 -Name fm_menuN -Live)
+    Get-ChildItem (Join-Path $csgo "panorama") -Recurse -Include "fm_menu*.vxml_c", "fm_menu*.vcss_c" -ErrorAction SilentlyContinue | Remove-Item -Force
     # other folders we created (panorama\...) only if nothing else is in them, deepest first
     foreach ($d in $dirs.Keys | Sort-Object Length -Descending) {
       if ((Test-Path $d) -and -not (Get-ChildItem $d -Force)) { Remove-Item $d -Force }

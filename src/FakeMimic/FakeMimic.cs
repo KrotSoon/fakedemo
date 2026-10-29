@@ -166,7 +166,12 @@ public partial class FakeMimic : BasePlugin
         RegisterListener<Listeners.OnCustomHudClicked>(OnHudClicked);
         LoadMenuPrefs();
         LoadModels();
-        if (hotReload) AddTimer(1f, TakeOverRespawn);   // no map start after a hot reload
+        if (hotReload)
+        {
+            AddTimer(1f, TakeOverRespawn);   // no map start after a hot reload
+            // the menu panel of the previous instance would stay on screen with nobody driving it
+            foreach (var old in Utilities.FindAllEntitiesByDesignerName<CCSCustomHudLayout>("custom_hud_layout")) old.Remove();
+        }
         RegisterApi();
         // the layout is a resource: it must be precached on map load or the entity rejects it
         RegisterListener<Listeners.OnServerPrecacheResources>(m =>
@@ -391,13 +396,16 @@ public partial class FakeMimic : BasePlugin
     // plugin and the client share one console).
 
     // the entity takes the source name (.xml); ".vxml" is rejected as an invalid resource name
-    const string HudLayout = "panorama/layout/custom_game/fm_menu.xml";
+    // fm_hud_file switches it for layout development (a new file name is never a cached one)
+    static string HudLayout = "panorama/layout/custom_game/fm_menu.xml";
 
     record MenuItem(string Text, Action<CCSPlayerController> Pick, bool Accent = false);   // Accent: salmon row (stop, delete)
     record Menu(string Title, List<MenuItem> Items, bool Main = false);   // Close (9) only on the main menu
 
     Menu? _menu;
     CCSCustomHudLayout? _hud;
+    bool _swapping;    // a pick is opening the next screen in the menu that is already on screen
+    bool _swapB;
     Action<CCSPlayerController, string>? _awaitText;   // next chat line goes here (names)
 
     void Say(CCSPlayerController p, string msg) => p.PrintToChat($" {ChatColors.Green}[FM]{ChatColors.Default} {msg}");
@@ -440,10 +448,20 @@ public partial class FakeMimic : BasePlugin
             hud.SetHasClass($"b{i}", "Accent", i != 9 && item?.Accent == true);
         }
         ApplyMenuPrefs(hud);
+        if (_swapping || _settingsOpen) Swap(hud);
         _settingsOpen = false;
         hud.SetHasClass("menu", "Settings", false);
         hud.SetHasClass("menu", "Hidden", false);
         hud.SetInputCaptureEnabled(p, true);
+    }
+
+    // Another screen in the open menu: the layout replays the rows' entrance (keyframes) whenever the
+    // class on #menu switches between SwapA and SwapB, in the same tick as the new texts.
+    void Swap(CCSCustomHudLayout hud)
+    {
+        _swapB = !_swapB;
+        hud.SetHasClass("menu", "SwapA", !_swapB);
+        hud.SetHasClass("menu", "SwapB", _swapB);
     }
 
     void CloseMenu(CCSPlayerController p)
@@ -453,6 +471,24 @@ public partial class FakeMimic : BasePlugin
         if (_hud is not { IsValid: true }) return;
         _hud.SetHasClass("menu", "Hidden", true);
         _hud.SetInputCaptureEnabled(p, false);
+    }
+
+    // Layout development: a changed vxml_c / vcss_c is never read again while the game runs (not on a
+    // map load, not with resource_repeated_reload), so each build gets a new file name
+    // (toolsuild_hud.ps1 -Name fm_menuN -Live) and this points the plugin at it for the next map load.
+    [ConsoleCommand("fm_hud_file", "fm_hud_file <name> - use panorama/layout/custom_game/<name>.xml from the next map load (development)")]
+    public void CmdHudFile(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        HudLayout = $"panorama/layout/custom_game/{cmd.ArgByIndex(1)}.xml";
+        cmd.ReplyToCommand($"[FM] menu layout {HudLayout} from the next map load");
+    }
+
+    [ConsoleCommand("fm_cls", "fm_cls <panel id> <class> <0|1> - set a class on the menu layout (debug)")]
+    public void CmdCls(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        if (_hud is not { IsValid: true }) { cmd.ReplyToCommand("[FM] no HUD entity"); return; }
+        _hud.SetHasClass(cmd.ArgByIndex(1), cmd.ArgByIndex(2), cmd.ArgByIndex(3) != "0");
+        cmd.ReplyToCommand($"[FM] {cmd.ArgByIndex(1)}.{cmd.ArgByIndex(2)} = {cmd.ArgByIndex(3) != "0"}");
     }
 
     [ConsoleCommand("fm_hudinfo", "fm_hudinfo - state of the menu HUD entity (debug)")]
@@ -549,6 +585,7 @@ public partial class FakeMimic : BasePlugin
     void ShowSettings(bool open)
     {
         if (_hud is not { IsValid: true }) return;
+        Swap(_hud);
         _settingsOpen = open;
         _hud.SetHasClass("menu", "Settings", open);
         _hud.SetDialogVariableString("menu", "title", open ? "Settings" : Plain(_menu?.Title ?? ""));
@@ -559,8 +596,13 @@ public partial class FakeMimic : BasePlugin
         if (_menu == null) return;
         if (n == 9 || n > _menu.Items.Count) { if (n == 9 && _menu.Main) CloseMenu(p); return; }
         var item = _menu.Items[n - 1];
-        CloseMenu(p);           // the pick may open another menu
-        item.Pick(p);
+        // the pick may open another screen (Show while _swapping animates the switch); if it does
+        // not (an action, a name asked in chat), the menu closes
+        _menu = null;
+        _swapping = true;
+        try { item.Pick(p); }
+        finally { _swapping = false; }
+        if (_menu == null) CloseMenu(p);
     }
 
     void AskText(CCSPlayerController p, string prompt, Action<CCSPlayerController, string> then)

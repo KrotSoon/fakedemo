@@ -15,15 +15,14 @@
 
     /* glass */
     background-color: #161a22a0;
-    backdrop-filter: blur(14px);
-    background-blur: fastgaussian(6, 6, 4);
+    background-blur: gaussian(6, 6, 1);
     border: 1px solid #ffffff2a;
     border-radius: 20px;
     box-shadow: #00000066 0px 12px 40px 0px;
 
     transition-property: opacity, transform;
-    transition-duration: .32s;
-    transition-timing-function: cubic-bezier(.2, 1.5, .35, 1);
+    transition-duration: .2s, .32s;
+    transition-timing-function: ease-out, cubic-bezier(.2, 1.5, .35, 1);
     opacity: 1;
     transform: translateX(0px);
 
@@ -209,8 +208,8 @@
     background-color: #ffffff14;
 
     transition-property: background-color, transform;
-    transition-duration: .2s;
-    transition-timing-function: cubic-bezier(.2, 1.6, .4, 1);
+    transition-duration: .12s, .25s;
+    transition-timing-function: ease-out, cubic-bezier(.2, 1.6, .4, 1);
 
     & Label {
         horizontal-align: center;
@@ -267,8 +266,8 @@
     background-color: #ffffff1a;
 
     transition-property: background-color, transform;
-    transition-duration: .3s;
-    transition-timing-function: cubic-bezier(.2, 1.8, .4, 1);
+    transition-duration: .12s, .3s;
+    transition-timing-function: ease-out, cubic-bezier(.2, 1.8, .4, 1);
 
     & Label {
         horizontal-align: center;
@@ -484,3 +483,50 @@
 .V39 .Knob { transform: translateX(312px); }
 .V40 .Fill { width: 320px; }
 .V40 .Knob { transform: translateX(320px); }
+
+/* ---- another screen in an open menu ----
+   The plugin flips SwapA / SwapB in the same tick it changes the texts. A class with another
+   animation name restarts the animation; fill-mode backwards keeps every row out of sight until its
+   delay is over, so the new screen arrives with the opening stagger and the old one never fades out
+   with the new text in it. (Transitions cannot do this here: in Panorama a 0 s duration on the
+   hidden state made the way back instant too.) */
+/* the spring is in the keyframes (overshoot to +4px): a springy timing curve on keyframes starts slow */
+@keyframes 'fm-in-a' {
+    0% { opacity: 0; transform: translateX(-24px); }
+    55% { opacity: 1; transform: translateX(4px); }
+    100% { opacity: 1; transform: translateX(0px); }
+}
+@keyframes 'fm-in-b' {
+    0% { opacity: 0; transform: translateX(-24px); }
+    55% { opacity: 1; transform: translateX(4px); }
+    100% { opacity: 1; transform: translateX(0px); }
+}
+/* the title only nudges: 24px would push it past the panel's left edge */
+@keyframes 'fm-title-a' {
+    0% { opacity: 0; transform: translateX(-8px); }
+    100% { opacity: 1; transform: translateX(0px); }
+}
+@keyframes 'fm-title-b' {
+    0% { opacity: 0; transform: translateX(-8px); }
+    100% { opacity: 1; transform: translateX(0px); }
+}
+#menu.SwapA .Item { animation-name: fm-in-a; }
+#menu.SwapA .Slider { animation-name: fm-in-a; }
+#menu.SwapA .Title { animation-name: fm-title-a; }
+#menu.SwapB .Item { animation-name: fm-in-b; }
+#menu.SwapB .Slider { animation-name: fm-in-b; }
+#menu.SwapB .Title { animation-name: fm-title-b; }
+.Item, .Slider, .Title {
+    animation-duration: .3s;
+    animation-timing-function: ease-out;
+    animation-fill-mode: backwards;
+}
+.Title { animation-duration: .22s; }
+#b2, #sly { animation-delay: .025s; }
+#b3, #sls { animation-delay: .05s; }
+#b4, #sb { animation-delay: .075s; }
+#b5 { animation-delay: .1s; }
+#b6 { animation-delay: .125s; }
+#b7 { animation-delay: .15s; }
+#b8 { animation-delay: .175s; }
+#b9 { animation-delay: .2s; }

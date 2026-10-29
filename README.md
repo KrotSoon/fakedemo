@@ -67,7 +67,10 @@ powershell -ExecutionPolicy Bypass -File fakedemo.ps1 migrate -From "D:\...\fake
 - `src\FakeDemo.sln`: FakeMimic, FakeMimicApi, FakeDirector (.NET 10, CounterStrikeSharp 1.0.378). Версия пакета одна, в файле `VERSION`.
 - `tools\build.ps1` собирает dll в `plugins\`, после чего `FakeDemo.cmd` можно запускать прямо из репозитория.
 - `tools\pack.ps1` собирает `dist\FakeDemo-<ver>.zip` и `-full.zip`.
-- HUD меню: исходники в `hud\`, скомпилированные `vxml_c` и `vcss_c` в `game\panorama` (компилируются Workshop Tools CS2).
+- HUD меню: исходники в `hud\`, скомпилированные `vxml_c` и `vcss_c` в `game\panorama`. Компиляция: `toolsuild_hud.ps1` (нужны Workshop Tools CS2).
+- Проверка меню в запущенной игре без человека: `tools\hudcam.ps1`. Он берёт порт и пароль netcon сессии лаунчера из `last.log`, вводит команды и снимает серию кадров окна CS2 в один лист с временем каждого кадра. Пример: `tools\hudcam.ps1 -Commands "fm_menu" -Frames 12 -IntervalMs 40 -Crop "940,500,360,480" -Out shots\open`. Несколько команд передаются одной строкой через `;`.
+- Игра не перечитывает изменённый макет или стили до перезапуска, даже при смене карты. Поэтому каждая итерация собирается под новым именем: `toolsuild_hud.ps1 -Live -Name fm_menu7`, затем в игре `fm_hud_file fm_menu7; map de_mirage`. `fm_cls <панель> <класс> <0|1>` выставляет класс вручную. Пробные `fm_menuN` удаляет `off`.
+- Особенности Panorama: размытие фона пишется как `background-blur: gaussian(6, 6, 1)`, `backdrop-filter` не существует; полный список свойств выдаёт `dump_panorama_css_properties`. Переход с `0s` в одном из состояний делает мгновенными оба направления, поэтому повтор анимации при смене экрана сделан через `@keyframes` и чередование классов `SwapA`/`SwapB`.
 - `tools\list_models.py` обновляет `game\models.txt` после того, как CS2 добавит агентов.
 
 Выпуск версии: поднять `VERSION` → дописать `CHANGELOG.md` → `tools\pack.ps1` → создать GitHub Release с тегом `v<ver>` и приложить оба zip.
