@@ -32,6 +32,11 @@ $MetamodLine = "`t`t`tGame`tcsgo/addons/metamod"
 $LegacyPaths = "panorama\layout\custom_game\fm_menu.vxml_c", "panorama\styles\custom_game\fm_menu.vcss_c",
   "addons\metamod", "addons\counterstrikesharp", "addons\BotController", "addons\metamod.vdf", "addons\metamod_x64.vdf"
 $OwnTrees = "addons\metamod", "addons\counterstrikesharp", "addons\BotController"
+# netcon for this session only, when a workshop map has to be typed into the running game
+# and no own port is set in the launcher. CS2 listens on every interface while it runs, so the
+# password is new every run
+$SessionPort = 29121
+$SessionPass = -join ((48..57) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
 $CfgFiles = "fd.cfg", "fd_actions.cfg", "fd_blank.cfg", "fd_fake.cfg", "fd_help.cfg", "fd_user.cfg", "fd_unfake.cfg", "gamemode_custom_server.cfg",
   "fd_ws.cfg", "fd_ws_list.cfg"
 
@@ -468,19 +473,80 @@ function Import-OldData([string]$dir, [string]$plugin) {
 
 # ---------------- launch ----------------
 
+# console port and password of this run: the launcher's own netcon setting, or the session one
+# for a workshop map; port 0 = no netcon
+function Netcon-Of($s) {
+  if ([int]$s.NetconPort -gt 0) { return @{ Port = [int]$s.NetconPort; Pass = $s.NetconPassword } }
+  if ($s.MapKind -eq "workshop" -and $s.MapId) { return @{ Port = $SessionPort; Pass = $SessionPass } }
+  @{ Port = 0; Pass = "" }
+}
+
 function Launch-Args($s) {
   $a = @()
   if ($s.Plugins) { $a += "-insecure" }
-  if ([int]$s.NetconPort -gt 0) {
-    $a += "-netconport", $s.NetconPort
-    if ($s.NetconPassword) { $a += "-netconpassword", $s.NetconPassword }
+  $nc = Netcon-Of $s
+  if ($nc.Port) {
+    $a += "-netconport", $nc.Port
+    if ($nc.Pass) { $a += "-netconpassword", $nc.Pass }
   }
   if ($s.LaunchOptions) { $a += ($s.LaunchOptions -split '\s+' | Where-Object { $_ }) }
   # a map needs the custom mode from exec fd, or fd_fake.cfg does not run on it
   if ($s.ExecFd -or $s.MapId) { $a += "+exec", "fd" }
-  if ($s.MapId -and $s.MapKind -eq "workshop") { $a += "+host_workshop_map", $s.MapId }
-  elseif ($s.MapId) { $a += "+map", $s.MapId }
+  # a workshop map is not mounted yet when the command line runs: Load-WorkshopMap types it in later
+  if ($s.MapId -and $s.MapKind -ne "workshop") { $a += "+map", $s.MapId }
   $a
+}
+
+# ---------------- netcon (the game console over TCP, as HLAE tools use it) ----------------
+
+function Netcon-Send($stream, [string]$text) {
+  $bytes = [Text.Encoding]::UTF8.GetBytes("$text`n")
+  $stream.Write($bytes, 0, $bytes.Length); $stream.Flush()
+}
+
+# console text until nothing new came for $quietMs, or $maxMs passed
+function Netcon-Read($stream, [int]$quietMs, [int]$maxMs) {
+  $buf = New-Object byte[] 65536; $out = New-Object Text.StringBuilder
+  $all = [Diagnostics.Stopwatch]::StartNew(); $quiet = [Diagnostics.Stopwatch]::StartNew()
+  while ($quiet.ElapsedMilliseconds -lt $quietMs -and $all.ElapsedMilliseconds -lt $maxMs) {
+    if ($stream.DataAvailable) {
+      $n = $stream.Read($buf, 0, $buf.Length)
+      [void]$out.Append([Text.Encoding]::UTF8.GetString($buf, 0, $n)); $quiet.Restart()
+    } else { Start-Sleep -Milliseconds 100 }
+  }
+  $out.ToString()
+}
+
+# host_workshop_map only works once Steam has mounted the workshop content, which is after the
+# command line ran: wait for the main menu (the console goes quiet), then type it in
+function Load-WorkshopMap($s) {
+  $nc = Netcon-Of $s
+  $client = $null
+  $deadline = (Get-Date).AddMinutes(4)
+  while (-not $client -and (Get-Date) -lt $deadline -and (Cs2-Running)) {
+    $c = New-Object Net.Sockets.TcpClient
+    try { $c.Connect("127.0.0.1", $nc.Port); $client = $c } catch { $c.Dispose(); Start-Sleep -Milliseconds 500 }
+  }
+  if (-not $client) { Log "WARNING game console not reachable: load the map in game with ws"; return }
+  try {
+    $st = $client.GetStream()
+    if ($nc.Pass) { Netcon-Send $st "PASS $($nc.Pass)" }
+    [void](Netcon-Read $st 4000 120000)
+    Log "loading workshop map $($s.MapTitle) ($($s.MapId))"
+    Netcon-Send $st "host_workshop_map $($s.MapId)"
+    $reply = Netcon-Read $st 5000 45000
+    $lines = @($reply -split "`r?`n" | Where-Object { $_ -match 'workshop|map|fail|error|unknown' } | Select-Object -First 6)
+    foreach ($l in $lines) { Log "  game: $($l.Trim())" }
+  } catch { Log "WARNING workshop map not sent: $($_.Exception.Message)" }
+  finally { $client.Close() }
+}
+
+function Wait-Cs2Start {
+  $deadline = (Get-Date).AddMinutes(5)
+  while (-not (Cs2-Running)) {
+    if ((Get-Date) -gt $deadline) { throw "CS2 did not start within 5 minutes" }
+    Start-Sleep -Seconds 2
+  }
 }
 
 function Play($s) {
@@ -490,14 +556,15 @@ function Play($s) {
   $a = Launch-Args $s
   Log "starting CS2: $($a -join ' ')"
   Start-Process (Join-Path (Steam-Path) "steam.exe") -ArgumentList (@("-applaunch", "730") + $a)
-  if (-not $s.Plugins) { Log "started without plugins"; return }
+  $workshop = $s.MapKind -eq "workshop" -and $s.MapId
+  if (-not $s.Plugins) {
+    if ($workshop) { Wait-Cs2Start; Load-WorkshopMap $s }
+    Log "started without plugins"; return
+  }
   try {
-    $deadline = (Get-Date).AddMinutes(5)
-    while (-not (Cs2-Running)) {
-      if ((Get-Date) -gt $deadline) { throw "CS2 did not start within 5 minutes" }
-      Start-Sleep -Seconds 2
-    }
+    Wait-Cs2Start
     Log "CS2 is running. Plugins come out when it closes - keep this running"
+    if ($workshop) { Load-WorkshopMap $s }
     Wait-Process cs2 -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3   # let cs2 release its files
   } finally {
