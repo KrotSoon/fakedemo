@@ -157,7 +157,6 @@ public partial class FakeMimic : BasePlugin
         RegisterListener<Listeners.OnMapStart>(_ =>
         {
             _recName = null; _replays.Clear(); _menu = null; _hud = null;
-            ForgetXray();
             // create the (hidden) HUD while the map loads: the first creation loads the panorama
             // layout and froze the game for ~0.5 s when it happened on the first H press
             AddTimer(2f, () => Hud());
@@ -165,7 +164,6 @@ public partial class FakeMimic : BasePlugin
             AddTimer(3f, TakeOverRespawn);
         });
         RegisterListener<Listeners.OnCustomHudClicked>(OnHudClicked);
-        LoadXray();
         LoadMenuPrefs();
         LoadModels();
         if (hotReload)
@@ -186,13 +184,6 @@ public partial class FakeMimic : BasePlugin
         AddCommandListener("say_team", OnSay);
     }
 
-    public override void Unload(bool hotReload)
-    {
-        // glowing copies and the radar setting must not outlive the plugin
-        _xrayAlways = false; _recName = null;
-        SyncXray();
-    }
-
     public override void OnAllPluginsLoaded(bool hotReload)
     {
         _bc = BotController.Get();
@@ -205,13 +196,9 @@ public partial class FakeMimic : BasePlugin
 
     // replay drives movement, view and buttons; weapons are switched here from the replayed tick,
     // and a bot that reached the end is frozen in place (otherwise its AI walks away)
-    int _tick;
-
     void OnTick()
     {
         if (_bc == null) return;
-        if (++_tick % 8 == 0) SyncXray();
-        SpotGlowing();
         foreach (var r in _replays)
         {
             if (!r.Running || r.Bot is not { IsValid: true }) continue;
@@ -257,6 +244,7 @@ public partial class FakeMimic : BasePlugin
         _recWeapons = pawn.WeaponServices!.MyWeapons.Select(h => h.Value?.DesignerName).OfType<string>().ToList();
         if (!_bc.SetReplayPawn(p.Slot, pawn.Handle) || !_bc.StartRecord(p.Slot)) return "recording did not start";
         _recName = name;
+        _api?.RaiseRecording(name, true);
         _recPlayer = p;
         return $"recording '{name}'...";
     }
@@ -273,6 +261,7 @@ public partial class FakeMimic : BasePlugin
         };
         rec.Save(PathOf(_recName));
         var msg = $"saved '{_recName}': {rec.Seconds:0.0} s";
+        _api?.RaiseRecording(_recName, false);
         _recName = null;
         return msg;
     }
@@ -574,7 +563,6 @@ public partial class FakeMimic : BasePlugin
             if (p[0] != PrefsVersion) return;   // older 11-step file: keep the defaults
             int V(string s) => Math.Clamp(int.Parse(s), 0, SliderSteps);
             (_menuX, _menuY, _menuS) = (V(p[1]), V(p[2]), V(p[3]));
-            if (p.Length > 4) _xrayWhileRecording = p[4] != "0";
         }
         catch (Exception) { /* no file: defaults */ }
     }
@@ -582,7 +570,7 @@ public partial class FakeMimic : BasePlugin
     void SaveMenuPrefs()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(PrefsPath)!);
-        File.WriteAllText(PrefsPath, $"{PrefsVersion} {_menuX} {_menuY} {_menuS} {(_xrayWhileRecording ? 1 : 0)}");
+        File.WriteAllText(PrefsPath, $"{PrefsVersion} {_menuX} {_menuY} {_menuS}");
     }
 
     void SetOnly(CCSCustomHudLayout hud, string panel, string cls)
@@ -659,10 +647,13 @@ public partial class FakeMimic : BasePlugin
             items.Add(new("Start take (bots + demo)", pl => Say(pl, StartTake())));
         else
             items.Add(new($"Stop take '{_take}'", pl => { Say(pl, StopTake()); MainMenu(pl); }, Accent: true));
-        items.Add(new("Start all bots", pl => Say(pl, Go())));
-        items.Add(new("Stop all bots", pl => { Say(pl, Halt()); MainMenu(pl); }));
-        // add-on plugins (FakeDirector, ...) through the API; "Clear" stays last, away from the common rows
-        items.AddRange(_addonItems.Take(Math.Max(0, 7 - items.Count)));
+        // one row: start or stop, whichever applies (leaves room for add-ons)
+        if (_replays.Any(r => r.Running))
+            items.Add(new("Stop all bots", pl => { Say(pl, Halt()); MainMenu(pl); }));
+        else
+            items.Add(new("Start all bots", pl => Say(pl, Go())));
+        // add-on plugins (FakeDirector, FakeXray, ...) through the API; "Clear" stays last, away from the common rows
+        items.AddRange(_addonItems.Take(Math.Max(0, 7 - items.Count)).Select(a => new MenuItem(a.Text(), a.Pick)));
         items.Add(new("Clear bot assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
         Show(p, new Menu("FakeMimic", items, Main: true));
     }
@@ -680,13 +671,6 @@ public partial class FakeMimic : BasePlugin
         Show(p, new Menu("New movement", new List<MenuItem>
         {
             new($"Record as '{name}'", pl => Record(pl, name)),
-            // only matters with bots running: their outlines through walls while you record
-            new($"See bots through walls: {(_xrayWhileRecording ? "on" : "off")}", pl =>
-            {
-                _xrayWhileRecording = !_xrayWhileRecording;
-                SaveMenuPrefs();
-                NewMovementMenu(pl);
-            }),
             new("← Back", MainMenu),
         }));
         _awaitText = Record;

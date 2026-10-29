@@ -10,7 +10,7 @@ public partial class FakeMimic
 {
     static readonly PluginCapability<IFakeMimicApi> ApiCapability = new(IFakeMimicApi.Capability);
 
-    readonly List<MenuItem> _addonItems = new();
+    readonly List<(Func<string> Text, Action<CCSPlayerController> Pick)> _addonItems = new();
     TakeInfo? _takeInfo;
     Api? _api;
 
@@ -45,12 +45,16 @@ public partial class FakeMimic
 
         public event Action<TakeInfo>? TakeStarted;
         public event Action<TakeInfo>? TakeStopped;
+        public event Action<string>? RecordingStarted;
+        public event Action<string>? RecordingStopped;
+        public void RaiseRecording(string name, bool started) => (started ? RecordingStarted : RecordingStopped)?.Invoke(name);
 
         public void RaiseStarted(TakeInfo info) => TakeStarted?.Invoke(info);
         public void RaiseStopped(TakeInfo info) => TakeStopped?.Invoke(info);
 
-        public void AddMainMenuItem(string text, Action<CCSPlayerController> pick) =>
-            plugin._addonItems.Add(new MenuItem(text, pick));
+        public void AddMainMenuItem(string text, Action<CCSPlayerController> pick) => AddMainMenuItem(() => text, pick);
+
+        public void AddMainMenuItem(Func<string> text, Action<CCSPlayerController> pick) => plugin._addonItems.Add((text, pick));
 
         public void ShowMenu(CCSPlayerController player, string title, IReadOnlyList<ApiMenuItem> items) =>
             plugin.Show(player, new Menu(title, items.Take(8).Select(i => new MenuItem(i.Text, i.Pick, i.Accent)).ToList()));

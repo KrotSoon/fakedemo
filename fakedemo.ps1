@@ -399,6 +399,7 @@ function Plugins-On($s) {
     Put "$css\plugins\FakeMimic\models.txt" { param($p) Copy-Item (Join-Path $Here "game\models.txt") $p }
     Put "$css\shared\FakeMimicApi\FakeMimicApi.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeMimicApi\FakeMimicApi.dll") $p }
     if ($s.FakeDirector) { Put "$css\plugins\FakeDirector\FakeDirector.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeDirector\FakeDirector.dll") $p } }
+    Put "$css\plugins\FakeXray\FakeXray.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeXray\FakeXray.dll") $p }
     # FakeMimic menu: compiled custom HUD layout
     foreach ($f in Get-ChildItem (Join-Path $Here "game\panorama") -Recurse -File) {
       Put ("panorama\" + $f.FullName.Substring((Join-Path $Here "game\panorama").Length + 1)) { param($p) Copy-Item $f.FullName $p }

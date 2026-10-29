@@ -30,7 +30,7 @@ public interface IFakeMimicApi
     const string Capability = "fakemimic:api";
 
     /// Bumped on every change of this contract; add-ons compare it with the one they were built with.
-    const int CurrentVersion = 2;
+    const int CurrentVersion = 3;
 
     /// CurrentVersion of the FakeMimic that is loaded.
     int Version { get; }
@@ -41,9 +41,14 @@ public interface IFakeMimicApi
     /// Fired when a take starts (bots + tv_record) and when it stops.
     event Action<TakeInfo>? TakeStarted;
     event Action<TakeInfo>? TakeStopped;
+    /// Fired when the player starts and stops recording a movement (name of the recording).
+    event Action<string>? RecordingStarted;
+    event Action<string>? RecordingStopped;
 
     /// Adds an entry to FakeMimic's main menu (one per add-on; the menu holds 8 rows).
     void AddMainMenuItem(string text, Action<CCSPlayerController> pick);
+    /// Same, with a text read each time the menu opens (e.g. "X-ray: on").
+    void AddMainMenuItem(Func<string> text, Action<CCSPlayerController> pick);
 
     /// Shows a screen in FakeMimic's in-game menu: up to 8 rows, row 9 is always Close.
     void ShowMenu(CCSPlayerController player, string title, IReadOnlyList<ApiMenuItem> items);
