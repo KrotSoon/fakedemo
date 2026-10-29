@@ -652,10 +652,20 @@ public partial class FakeMimic : BasePlugin
             items.Add(new("Stop all bots", pl => { Say(pl, Halt()); MainMenu(pl); }));
         else
             items.Add(new("Start all bots", pl => Say(pl, Go())));
-        // add-on plugins (FakeDirector, FakeXray, ...) through the API; "Clear" stays last, away from the common rows
-        items.AddRange(_addonItems.Take(Math.Max(0, 7 - items.Count)).Select(a => new MenuItem(a.Text(), a.Pick)));
         items.Add(new("Clear bot assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
+        // modules (FakeDirector, FakeXray, ...): one row each, each opens its own screen;
+        // more than fit go behind one "Modules" row
+        var free = 8 - items.Count;
+        if (_addonItems.Count <= free) items.AddRange(_addonItems.Select(a => new MenuItem(a.Text(), a.Pick)));
+        else items.Add(new("Modules ›", ModulesMenu));
         Show(p, new Menu("FakeMimic", items, Main: true));
+    }
+
+    void ModulesMenu(CCSPlayerController p)
+    {
+        var items = _addonItems.Take(7).Select(a => new MenuItem(a.Text(), a.Pick)).ToList();
+        items.Add(new("← Back", MainMenu));
+        Show(p, new Menu("Modules", items));
     }
 
     // a name is optional: 1 records under the next free default name (m1, m2, ...), or a name typed in

@@ -39,7 +39,7 @@ public class FakeDirector : BasePlugin
         if (_fm.Version != IFakeMimicApi.CurrentVersion)
             Logger.LogWarning("FakeMimic API {Have}, FakeDirector was built for {Want}: install matching versions", _fm.Version, IFakeMimicApi.CurrentVersion);
         _fm.TakeStopped += OnTakeStopped;
-        _fm.AddMainMenuItem("Takes", p => TakesMenu(p));
+        _fm.AddMainMenuItem("Takes ›", p => TakesMenu(p));
     }
 
     // ---------------- storage ----------------

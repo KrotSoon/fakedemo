@@ -2,7 +2,8 @@
 // Every bot gets a glowing copy of its model (T orange, CT blue) that follows it through a hidden relay
 // prop, and is kept "spotted" so the radar shows it. Only the human player is sent the copies: GOTV
 // never gets them, so demos show ordinary bots.
-// On: J (fx_xray) or the row in FakeMimic's menu; by itself while FakeMimic records a movement or a take.
+// On: J (fx_xray) or its screen in FakeMimic's menu; by itself while FakeMimic records a movement or a take.
+// Settings (auto, radar) are kept in Documents\FakeDemo\xray.txt.
 using System.Drawing;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
@@ -34,17 +35,40 @@ public class FakeXray : BasePlugin
     }
 
     readonly Dictionary<int, Glow> _glows = new();   // by bot slot
-    bool _manual;                                     // J / menu row
+    bool _manual;                                     // J / menu
     int _auto;                                        // FakeMimic recordings and takes running
+    bool _autoOn = true;                              // settings
+    bool _radar = true;
+    IFakeMimicApi? _fm;
     int _tick;
 
     static readonly Color GlowT = Color.FromArgb(255, 255, 150, 40);
     static readonly Color GlowCT = Color.FromArgb(255, 90, 160, 255);
 
-    bool Wanted => _manual || _auto > 0;
+    bool Wanted => _manual || (_autoOn && _auto > 0);
+
+    static string SettingsPath => Path.Combine(FakeDemoPaths.Root, "xray.txt");
+
+    void LoadSettings()
+    {
+        try
+        {
+            var p = File.ReadAllText(SettingsPath).Split(' ');
+            (_autoOn, _radar) = (p[0] != "0", p[1] != "0");
+        }
+        catch (Exception) { /* no file: defaults */ }
+    }
+
+    void SaveSettings()
+    {
+        Directory.CreateDirectory(FakeDemoPaths.Root);
+        File.WriteAllText(SettingsPath, $"{(_autoOn ? 1 : 0)} {(_radar ? 1 : 0)}");
+    }
 
     public override void Load(bool hotReload)
     {
+        LoadSettings();
+        if (hotReload) AddTimer(0.5f, Hook);
         RegisterListener<Listeners.OnMapStart>(_ => { _glows.Clear(); _auto = 0; });
         RegisterListener<Listeners.OnTick>(() =>
         {
@@ -66,18 +90,19 @@ public class FakeXray : BasePlugin
         });
     }
 
-    public override void OnAllPluginsLoaded(bool hotReload)
+    public override void OnAllPluginsLoaded(bool hotReload) => Hook();
+
+    // into FakeMimic's menu and events, once per FakeMimic instance (a hot reload of this plugin alone
+    // does not call OnAllPluginsLoaded, so Load hooks too)
+    void Hook()
     {
         var fm = FakeMimic.Get();
-        if (fm == null) return;   // works without FakeMimic: J only
+        if (fm == null || ReferenceEquals(fm, _fm)) return;   // works without FakeMimic: J only
+        _fm = fm;
+        Logger.LogInformation("X-ray screen added to the FakeMimic menu");
         if (fm.Version != IFakeMimicApi.CurrentVersion)
             Logger.LogWarning("FakeMimic API {Have}, FakeXray was built for {Want}: install matching versions", fm.Version, IFakeMimicApi.CurrentVersion);
-        fm.AddMainMenuItem(() => $"See bots through walls: {(_manual ? "on" : "off")}", p =>
-        {
-            Toggle();
-            fm.Say(p, Describe());
-            fm.OpenMainMenu(p);
-        });
+        fm.AddMainMenuItem(() => $"X-ray: {(_manual ? "on" : "off")} ›", Screen);
         fm.RecordingStarted += _ => _auto++;
         fm.RecordingStopped += _ => _auto = Math.Max(0, _auto - 1);
         fm.TakeStarted += _ => _auto++;
@@ -91,7 +116,23 @@ public class FakeXray : BasePlugin
 
     void Toggle() => _manual = !_manual;
 
-    string Describe() => _manual ? "bots glow through walls (J to turn off)" : "bots glow only while you record or a take runs";
+    static string OnOff(bool v) => v ? "on" : "off";
+
+    // module screen in FakeMimic's menu: switches and settings
+    void Screen(CCSPlayerController p)
+    {
+        if (_fm == null) return;
+        _fm.ShowMenu(p, "X-ray", new List<ApiMenuItem>
+        {
+            new($"Bots through walls: {OnOff(_manual)}   (J)", pl => { Toggle(); Screen(pl); }),
+            new($"By itself while recording / take: {OnOff(_autoOn)}", pl => { _autoOn = !_autoOn; SaveSettings(); Screen(pl); }),
+            new($"Show on radar: {OnOff(_radar)}", pl => { _radar = !_radar; SaveSettings(); Screen(pl); }),
+            new("← Back", pl => _fm.OpenMainMenu(pl)),
+        });
+    }
+
+    string Describe() => _manual ? "bots glow through walls (J to turn off)"
+        : _autoOn ? "bots glow only while you record or a take runs" : "x-ray off";
 
     // a few times a second: glows follow the wanted state, the bots' lives and model changes
     void Sync()
@@ -148,6 +189,7 @@ public class FakeXray : BasePlugin
     // every tick: the game clears "spotted" for bots out of sight, the radar would drop them
     void Spot()
     {
+        if (!_radar) return;
         foreach (var g in _glows.Values)
         {
             if (!g.Pawn.IsValid) continue;
