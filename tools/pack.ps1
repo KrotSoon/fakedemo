@@ -11,7 +11,7 @@ $dist = Join-Path $root "dist"
 $stage = Join-Path $dist "FakeDemo"
 if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
 New-Item -ItemType Directory -Force $stage | Out-Null
-foreach ($i in "FakeDemo.cmd", "Снять плагины.cmd", "fakedemo.ps1", "launcher.ps1", "VERSION", "deps.json",
+foreach ($i in "FakeDemo.exe", "FakeDemo.cmd", "Снять плагины.cmd", "fakedemo.ps1", "launcher.ps1", "VERSION", "deps.json",
                "README.md", "CHANGELOG.md", "LICENSE-THIRD-PARTY.md", "game", "plugins") {
   Copy-Item (Join-Path $root $i) $stage -Recurse
 }

@@ -9,3 +9,4 @@ foreach ($p in "FakeMimic", "FakeMimicApi", "FakeDirector") {
   Copy-Item (Join-Path $root "src\$p\bin\Release\net10.0\$p.dll") $dst -Force
 }
 Write-Host "plugins built: $root\plugins"
+& (Join-Path $root "tools\build_exe.ps1")

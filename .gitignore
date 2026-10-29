@@ -6,3 +6,5 @@ plugins/
 dist/
 # dependency zips go into the GitHub release named in deps.json, not into git
 deps/*.zip
+FakeDemo.exe
+FakeDemo.old.exe

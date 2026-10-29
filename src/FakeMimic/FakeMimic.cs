@@ -474,7 +474,7 @@ public partial class FakeMimic : BasePlugin
 
     // Layout development: a changed vxml_c / vcss_c is never read again while the game runs (not on a
     // map load, not with resource_repeated_reload), so each build gets a new file name
-    // (toolsuild_hud.ps1 -Name fm_menuN -Live) and this points the plugin at it for the next map load.
+    // (tools\build_hud.ps1 -Name fm_menuN -Live) and this points the plugin at it for the next map load.
     [ConsoleCommand("fm_hud_file", "fm_hud_file <name> - use panorama/layout/custom_game/<name>.xml from the next map load (development)")]
     public void CmdHudFile(CCSPlayerController? caller, CommandInfo cmd)
     {

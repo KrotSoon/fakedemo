@@ -1,6 +1,6 @@
 ﻿# FakeDemo launcher window. Same look as the FakeMimic menu (glass, CS2 gold, soft corners, springy
 # motion), its own layout: one big Play button, the two choices people change often, everything else under the gear.
-# Started by FakeDemo.cmd. The work is done by fakedemo.ps1: 'play' runs as its own hidden process,
+# Started by FakeDemo.exe (or FakeDemo.cmd). The work is done by fakedemo.ps1: 'play' runs as its own hidden process,
 # so plugins still come out after CS2 closes even if this window is closed earlier.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -459,7 +459,8 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         </Grid>
         <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="для HLAE-инструментов; порт 0 = выключено"/>
 
-        <DockPanel Margin="-6,14,-6,0">
+        <Button x:Name="BtnShortcut" Margin="-6,10,0,0" HorizontalAlignment="Left" Style="{StaticResource Link}" Content="Ярлык FakeDemo на рабочий стол"/>
+        <DockPanel Margin="-6,4,-6,0">
           <Button x:Name="BtnBinds" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Обновить бинды для unfake"/>
           <Button x:Name="BtnBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
         </DockPanel>
@@ -731,6 +732,13 @@ function Show-Line([string]$m, [string]$color) {
 function Show-Error([string]$m) { Show-Line $m "#FF8170" }
 function Show-Info([string]$m) { Show-Line $m "#80FFFFFF" }
 
+# after an update: the new launcher, as the exe when there is one
+function Start-Launcher {
+  $exe = Join-Path $here "FakeDemo.exe"
+  if (Test-Path $exe) { Start-Process $exe }
+  else { Start-Process cmd.exe -WindowStyle Hidden -ArgumentList "/c", "`"$(Join-Path $here 'FakeDemo.cmd')`"" }
+}
+
 function Playing { $script:proc -and -not $script:proc.HasExited }
 
 function Run-Hidden([string]$cmd) {
@@ -816,7 +824,7 @@ function Refresh {
   }
   if ($script:updProc -and $script:updProc.HasExited) {
     if ($script:updProc.ExitCode -eq 0) {
-      Start-Process cmd.exe -WindowStyle Hidden -ArgumentList "/c", "`"$(Join-Path $here 'FakeDemo.cmd')`""
+      Start-Launcher
       $win.Close()
     } else { Show-Error (Get-Content $LogFile -Tail 1 -Encoding UTF8); $script:updProc = $null }
   }
@@ -845,6 +853,15 @@ function Refresh {
 (El "BtnUpdate").Add_Click({ try { Do-Update } catch { Show-Error $_.Exception.Message } })
 (El "BtnBinds").Add_Click({
   try { Install-Cfg $script:s; Show-Screen "main"; Show-Info "Конфиги и fd_unfake.cfg обновлены из твоих биндов" } catch { Show-Error $_.Exception.Message } })
+(El "BtnShortcut").Add_Click({
+  try {
+    $lnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "FakeDemo.lnk"
+    $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+    $exe = Join-Path $here "FakeDemo.exe"
+    if (Test-Path $exe) { $sc.TargetPath = $exe; $sc.IconLocation = "$exe,0" } else { $sc.TargetPath = Join-Path $here "FakeDemo.cmd" }
+    $sc.WorkingDirectory = $here; $sc.Description = "FakeDemo for CS2"; $sc.Save()
+    Show-Screen "main"; Show-Info "Ярлык FakeDemo на рабочем столе"
+  } catch { Show-Error $_.Exception.Message } })
 (El "BtnBrowse").Add_Click({
   $d = New-Object System.Windows.Forms.FolderBrowserDialog
   $d.Description = "Папка Counter-Strike Global Offensive"

@@ -441,7 +441,7 @@ function Plugins-Off($s) {
     # these trees are ours as a whole (on refuses to install over foreign ones); CSS also writes
     # logs and plugin configs into them that are not in the manifest
     foreach ($d in $OwnTrees) { $p = Join-Path $csgo $d; if (Test-Path $p) { Remove-Item $p -Recurse -Force } }
-    # menu builds left by layout development (toolsuild_hud.ps1 -Name fm_menuN -Live)
+    # menu builds left by layout development (tools\build_hud.ps1 -Name fm_menuN -Live)
     Get-ChildItem (Join-Path $csgo "panorama") -Recurse -Include "fm_menu*.vxml_c", "fm_menu*.vcss_c" -ErrorAction SilentlyContinue | Remove-Item -Force
     # other folders we created (panorama\...) only if nothing else is in them, deepest first
     foreach ($d in $dirs.Keys | Sort-Object Length -Descending) {
@@ -642,6 +642,11 @@ function Update {
   $top = @(Get-ChildItem $root)
   if ($top.Count -eq 1 -and $top[0].PSIsContainer) { $root = $top[0].FullName }
   Get-ChildItem $root -Recurse -File | Unblock-File
+  # the running FakeDemo.exe cannot be overwritten but can be renamed; the old copy goes on the next update
+  $exe = Join-Path $Here "FakeDemo.exe"
+  $old = Join-Path $Here "FakeDemo.old.exe"
+  if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
+  if ((Test-Path $exe) -and (Test-Path (Join-Path $root "FakeDemo.exe"))) { Move-Item $exe $old -Force }
   Copy-Item (Join-Path $root "*") $Here -Recurse -Force
   Remove-Item $tmp -Recurse -Force
   Log "updated $Version -> $($r.Version). Restart the launcher"
