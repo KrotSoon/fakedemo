@@ -398,15 +398,22 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         </DockPanel>
       </StackPanel>
 
-      <!-- ===== map picker ===== -->
+      <!-- ===== map picker: two folders, search over both ===== -->
       <StackPanel x:Name="Picker" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,-6,0,10">
+          <RadioButton x:Name="TabOfficial" Style="{StaticResource Chip}" GroupName="tab"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+          <RadioButton x:Name="TabWorkshop" Style="{StaticResource Chip}" GroupName="tab"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+        </StackPanel>
         <Grid>
           <TextBox x:Name="TbSearch" Style="{StaticResource Field}"/>
           <TextBlock x:Name="SearchHint" Text="&#x2315;  Поиск по названию" IsHitTestVisible="False" Foreground="#60FFFFFF"
                      FontSize="14" Margin="12,0,0,0" VerticalAlignment="Center"/>
         </Grid>
         <ScrollViewer x:Name="PickScroll" Margin="0,10,-8,0" Height="430" VerticalScrollBarVisibility="Auto" Focusable="False">
-          <WrapPanel x:Name="PickList"/>
+          <StackPanel>
+            <WrapPanel x:Name="PickOfficial"/>
+            <WrapPanel x:Name="PickWorkshop" Visibility="Collapsed"/>
+          </StackPanel>
         </ScrollViewer>
         <TextBlock x:Name="PickEmpty" Style="{StaticResource Hint}" Margin="2,4,0,0" Visibility="Collapsed"/>
         <DockPanel Margin="-6,8,-6,0">
@@ -555,7 +562,7 @@ function Update-Summary {
   $s = $script:s
   (El "SwDirector").IsEnabled = [bool]$s.Plugins
   (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
-  $where = if ($s.WorkshopMap) { $s.WorkshopTitle } else { "главное меню" }
+  $where = if ($s.MapId) { $s.MapTitle } else { "главное меню" }
   (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
   Update-MapCard
 }
@@ -566,15 +573,17 @@ function Show-Screen([string]$name) {
   foreach ($k in $Screens.Keys) { (El $Screens[$k][0]).Visibility = $(if ($k -eq $name) { "Visible" } else { "Collapsed" }) }
   (El "Title").Text = $Screens[$name][1]
   Animate-In (El $Screens[$name][0])
-  if ($name -eq "picker") { Animate-In (El "PickList") 25 8 }
+  if ($name -eq "picker") { Animate-In (Pick-List) 25 8 }
 }
 
 function Screen { foreach ($k in $Screens.Keys) { if ((El $Screens[$k][0]).Visibility -eq "Visible") { return $k } } }
 
-# ---------------- workshop maps ----------------
+# ---------------- maps ----------------
 
-# a picture as a brush that fills a rounded Border; decoded small, file not kept open
+# a picture as a brush that fills a rounded Border; decoded small once, then reused
+$script:brushes = @{}
 function Image-Brush([string]$path) {
+  if ($script:brushes[$path]) { return $script:brushes[$path] }
   if (-not (Test-Path $path)) { return $null }
   try {
     $bi = New-Object Windows.Media.Imaging.BitmapImage
@@ -583,32 +592,37 @@ function Image-Brush([string]$path) {
     $bi.CacheOption = "OnLoad"; $bi.CreateOptions = "IgnoreImageCache"; $bi.DecodePixelWidth = 360
     $bi.EndInit(); $bi.Freeze()
     $b = New-Object Windows.Media.ImageBrush $bi
-    $b.Stretch = "UniformToFill"
+    $b.Stretch = "UniformToFill"; $b.Freeze()
+    $script:brushes[$path] = $b
     $b
   } catch { $null }
 }
 
-function Preview-Path([string]$id) { Join-Path $Data "ws\$id.img" }
+function Preview-Path([string]$kind, [string]$id) {
+  if ($kind -eq "workshop") { Join-Path $Data "ws\$id.img" } else { Join-Path $Data "maps\$id.png" }
+}
 
 function Update-MapCard {
   $s = $script:s
-  $chosen = [bool]$s.WorkshopMap
-  (El "MapTitle").Text = $(if ($chosen) { $s.WorkshopTitle } else { "Главное меню" })
-  (El "MapHint").Text = $(if ($chosen) { "сразу на карту из мастерской" } else { "нажми, чтобы выбрать карту из мастерской" })
+  $chosen = [bool]$s.MapId
+  (El "MapTitle").Text = $(if ($chosen) { $s.MapTitle } else { "Главное меню" })
+  (El "MapHint").Text = if (-not $chosen) { "нажми, чтобы выбрать карту" }
+                        elseif ($s.MapKind -eq "workshop") { "сразу на карту из мастерской" } else { "сразу на карту · $($s.MapId)" }
   (El "BtnMapClear").Visibility = $(if ($chosen) { "Visible" } else { "Collapsed" })
-  $brush = if ($chosen) { Image-Brush (Preview-Path $s.WorkshopMap) } else { $null }
+  $brush = if ($chosen) { Image-Brush (Preview-Path $s.MapKind $s.MapId) } else { $null }
   (El "MapThumb").Background = $(if ($brush) { $brush } else { "#14FFFFFF" })
   (El "MapGlyph").Visibility = $(if ($brush) { "Collapsed" } else { "Visible" })
   (El "MapGlyph").Text = $(if ($chosen) { [char]0x25A6 } else { [char]0x2630 })
 }
 
 function Choose-Map($m) {
-  $script:s.WorkshopMap = $(if ($m) { $m.Id } else { "" })
-  $script:s.WorkshopTitle = $(if ($m) { $m.Title } else { "" })
+  $script:s.MapKind = $(if ($m) { $m.Kind } else { "" })
+  $script:s.MapId = $(if ($m) { $m.Id } else { "" })
+  $script:s.MapTitle = $(if ($m) { $m.Title } else { "" })
   Save; Update-Summary
 }
 
-# one tile: preview (or the map name while it downloads), title, console name
+# one tile: preview (or the map name until it arrives), title, console name
 function New-Tile($m) {
   $b = New-Object Windows.Controls.Button
   $b.Style = $win.Resources["Tile"]
@@ -630,37 +644,56 @@ function New-Tile($m) {
   [void]$sp.Children.Add($thumb); [void]$sp.Children.Add($t); [void]$sp.Children.Add($h)
   $b.Content = $sp
   $id = $(if ($m) { $m.Id } else { "" })
-  if ($id -eq [string]$script:s.WorkshopMap) { $b.Tag = "on" }
-  $script:tiles[$b] = [pscustomobject]@{ Map = $m; Thumb = $thumb; Glyph = $glyph; Search = $(if ($m) { "$($m.Title) $($m.Map)".ToLower() } else { "" }) }
+  if ($id -eq [string]$script:s.MapId) { $b.Tag = "on" }
+  $script:tiles[$b] = [pscustomobject]@{ Map = $m; Thumb = $thumb; Glyph = $glyph; HasImage = $false
+                                         Search = $(if ($m) { "$($m.Title) $($m.Map)".ToLower() } else { "" }) }
   $b.Add_Click({ param($sender) Choose-Map $script:tiles[$sender].Map; Show-Screen "main" })
-  Set-TileImage $script:tiles[$b]
+  Set-TileImage $script:tiles[$b] $false
   $b
 }
 
-function Set-TileImage($tile) {
+function Set-TileImage($tile, [bool]$fade = $true) {
   if (-not $tile.Map -or $tile.HasImage) { return }
   $brush = Image-Brush $tile.Map.Preview
   if (-not $brush) { return }
-  $tile.Thumb.Background = $brush; $tile.Glyph.Visibility = "Collapsed"
-  $tile | Add-Member -Force HasImage $true
-  $tile.Thumb.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 300))
+  $tile.Thumb.Background = $brush; $tile.Glyph.Visibility = "Collapsed"; $tile.HasImage = $true
+  if ($fade) { $tile.Thumb.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 250)) }
+}
+
+function Pick-List { if ((El "TabWorkshop").IsChecked) { El "PickWorkshop" } else { El "PickOfficial" } }
+
+function Fill-List($panel, $maps, [switch]$Menu) {
+  $panel.Children.Clear()
+  if ($Menu) { [void]$panel.Children.Add((New-Tile $null)) }
+  foreach ($m in $maps) { [void]$panel.Children.Add((New-Tile $m)) }
 }
 
 function Open-Picker {
-  $list = El "PickList"; $list.Children.Clear()
   $script:tiles = @{}
-  $maps = @(Workshop-Maps $script:s | Sort-Object Title)
-  [void]$list.Children.Add((New-Tile $null))
-  foreach ($m in $maps) { [void]$list.Children.Add((New-Tile $m)) }
+  $script:official = @(Official-Maps $script:s | Sort-Object Title)
+  $script:workshop = @(Workshop-Maps $script:s | Sort-Object Title)
+  Fill-List (El "PickOfficial") $script:official -Menu
+  Fill-List (El "PickWorkshop") $script:workshop
+  (El "TabOfficial").Content = "Официальные  $($script:official.Count)"
+  (El "TabWorkshop").Content = "Мастерская  $($script:workshop.Count)"
+  # open on the folder of the chosen map
+  $script:loading = $true
+  (El "TabWorkshop").IsChecked = $script:s.MapKind -eq "workshop"
+  (El "TabOfficial").IsChecked = $script:s.MapKind -ne "workshop"
+  $script:loading = $false
   (El "TbSearch").Text = ""
-  (El "PickEmpty").Visibility = "Collapsed"
-  if (-not $maps) { Show-PickEmpty "Нет подписанных карт. Подпишись на карту в мастерской Steam, Steam её скачает, и она появится здесь" }
-  (El "PickScroll").ScrollToTop()
+  Show-Tab
   Show-Screen "picker"
-  if (@($maps | Where-Object { -not (Test-Path $_.Preview) }).Count -and -not ($script:prevProc -and -not $script:prevProc.HasExited)) {
-    $script:prevProc = Run-Hidden "previews"
-  }
+  Start-Previews
   (El "TbSearch").Focus() | Out-Null
+}
+
+function Show-Tab {
+  $ws = [bool](El "TabWorkshop").IsChecked
+  (El "PickWorkshop").Visibility = $(if ($ws) { "Visible" } else { "Collapsed" })
+  (El "PickOfficial").Visibility = $(if ($ws) { "Collapsed" } else { "Visible" })
+  (El "PickScroll").ScrollToTop()
+  Filter-Picker
 }
 
 function Show-PickEmpty([string]$m) { $e = El "PickEmpty"; $e.Text = $m; $e.Visibility = $(if ($m) { "Visible" } else { "Collapsed" }) }
@@ -669,13 +702,23 @@ function Filter-Picker {
   $q = (El "TbSearch").Text.Trim().ToLower()
   (El "SearchHint").Visibility = $(if ($q) { "Collapsed" } else { "Visible" })
   $shown = 0
-  foreach ($b in (El "PickList").Children) {
+  foreach ($b in (Pick-List).Children) {
     $tile = $script:tiles[$b]
     $ok = -not $q -or ($tile.Map -and $tile.Search.Contains($q))
     $b.Visibility = $(if ($ok) { "Visible" } else { "Collapsed" })
     if ($ok -and $tile.Map) { $shown++ }
   }
-  if ($q -and -not $shown) { Show-PickEmpty "Ничего не найдено по «$q»" } elseif ($q) { Show-PickEmpty "" }
+  $ws = [bool](El "TabWorkshop").IsChecked
+  if ($q -and -not $shown) { Show-PickEmpty "Ничего не найдено по «$q»" }
+  elseif ($ws -and -not $script:workshop) { Show-PickEmpty "Нет подписанных карт. Подпишись на карту в мастерской Steam, и после загрузки она появится здесь" }
+  else { Show-PickEmpty "" }
+}
+
+# previews come from a background process; the window picks them up as files appear
+function Start-Previews {
+  if ($script:prevProc -and -not $script:prevProc.HasExited) { return }
+  $missing = @(@(Official-Maps $script:s) + @(Workshop-Maps $script:s) | Where-Object { -not (Test-Path $_.Preview) })
+  if ($missing) { $script:prevProc = Run-Hidden "previews"; $script:prevTimer.Start() }
 }
 
 # ---------------- actions ----------------
@@ -778,11 +821,6 @@ function Refresh {
     } else { Show-Error (Get-Content $LogFile -Tail 1 -Encoding UTF8); $script:updProc = $null }
   }
   Read-Check
-  # previews arrive from the background download
-  if ($script:prevProc) {
-    if ((El "Picker").Visibility -eq "Visible") { foreach ($t in $script:tiles.Values) { Set-TileImage $t } }
-    if ($script:prevProc.HasExited) { $script:prevProc = $null; Update-MapCard }
-  }
 }
 
 # ---------------- events ----------------
@@ -795,6 +833,8 @@ function Refresh {
 (El "BtnPickBack").Add_Click({ Show-Screen "main" })
 (El "BtnWorkshop").Add_Click({ Start-Process "steam://openurl/https://steamcommunity.com/app/730/workshop/" })
 (El "TbSearch").Add_TextChanged({ Filter-Picker })
+(El "TabOfficial").Add_Checked({ if (-not $script:loading) { Show-Tab; Animate-In (Pick-List) 25 8 } })
+(El "TabWorkshop").Add_Checked({ if (-not $script:loading) { Show-Tab; Animate-In (Pick-List) 25 8 } })
 (El "BtnMapClear").Add_Click({ Choose-Map $null })
 # on mouse down, and marked handled: otherwise the panel starts moving the window and eats the click
 (El "MapCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Picker } catch { Show-Error $_.Exception.Message } })
@@ -831,7 +871,7 @@ $win.Add_PreviewKeyDown({
   if ($e.OriginalSource -eq (El "TbSearch")) {
     # Enter takes the first map found, Esc clears the search, then leaves
     if ($e.Key -eq "Enter") {
-      $first = (El "PickList").Children | Where-Object { $_.Visibility -eq "Visible" -and $script:tiles[$_].Map } | Select-Object -First 1
+      $first = (Pick-List).Children | Where-Object { $_.Visibility -eq "Visible" -and $script:tiles[$_].Map } | Select-Object -First 1
       if ($first) { Choose-Map $script:tiles[$first].Map; Show-Screen "main" }
       $e.Handled = $true; return
     }
@@ -853,7 +893,7 @@ $win.Add_Loaded({
   (El "Panel").BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 200))
   (El "PanelShift").BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -40 0 320 0 0.5))
   Start-Check
-  if ($script:s.WorkshopMap -and -not (Test-Path (Preview-Path $script:s.WorkshopMap))) { $script:prevProc = Run-Hidden "previews" }
+  Start-Previews   # in the background from the start, so the picker opens with pictures
   (El "TbCs2").ScrollToHorizontalOffset([double]::MaxValue)   # the end of a long path is the useful part
 })
 
@@ -865,6 +905,16 @@ $win.Dispatcher.Add_UnhandledException({
     New-Item -ItemType Directory -Force $Data | Out-Null
     Add-Content (Join-Path $Data "launcher-error.log") "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $($e.Exception)" -Encoding UTF8
     Show-Error "Ошибка: $($e.Exception.Message) (подробно в launcher-error.log)"
+  } catch { }
+})
+
+# previews arriving from the background process: checked often while it runs
+$script:prevTimer = New-Object Windows.Threading.DispatcherTimer
+$script:prevTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+$script:prevTimer.Add_Tick({
+  try {
+    if ((El "Picker").Visibility -eq "Visible") { foreach ($t in @($script:tiles.Values)) { Set-TileImage $t } }
+    if (-not $script:prevProc -or $script:prevProc.HasExited) { $script:prevTimer.Stop(); $script:prevProc = $null; Update-MapCard }
   } catch { }
 })
 

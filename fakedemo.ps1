@@ -50,8 +50,9 @@ function Default-Settings {
     Plugins       = $true     # FakeMimic + CS2-Bot-Controller (needs -insecure)
     FakeDirector  = $true     # take log add-on for FakeMimic
     ExecFd        = $true     # +exec fd on start (the game stays in the main menu)
-    WorkshopMap   = ""        # workshop item id to load right away; empty = main menu
-    WorkshopTitle = ""
+    MapKind       = ""        # map to load right away: "" = main menu, "official", "workshop"
+    MapId         = ""        # official: map name; workshop: item id
+    MapTitle      = ""
     LaunchOptions = "-novid"
     NetconPort    = 0         # 0 = off; HLAE tools use 2121
     NetconPassword = ""
@@ -173,36 +174,84 @@ function Install-Cfg($s) {
   try { Build-Unfake $s (Join-Path $cfg "fd_unfake.cfg") } catch { Log "WARNING fd_unfake.cfg not rebuilt: $($_.Exception.Message)" }
 }
 
-# ---------------- workshop maps ----------------
+# ---------------- maps ----------------
 
-# map names in a VPK directory: entries maps/<name>.vpk -> size (the biggest one is the map, others are its 3D sky)
-function Vpk-Maps([string]$file) {
+# entries of one folder in a VPK directory: name -> @{ Arch; Offset; Length; Preload; DataStart }
+# (only string compares in the loop: pak01 has ~140 000 entries)
+function Vpk-Entries([string]$file, [string]$wantExt, [string]$wantPath) {
   $fs = [IO.File]::OpenRead($file)
   try {
     $br = New-Object IO.BinaryReader $fs
     if ($br.ReadUInt32() -ne 0x55AA1234) { return @{} }
     $ver = $br.ReadUInt32(); $size = $br.ReadUInt32()
-    if ($ver -eq 2) { [void]$br.ReadBytes(16) }
+    $head = 12
+    if ($ver -eq 2) { [void]$br.ReadBytes(16); $head = 28 }
     $t = $br.ReadBytes($size)
   } finally { $fs.Dispose() }
   # tree: extension { path { name, 18-byte entry, preload bytes } }, every list ends with an empty string
-  $u = [Text.Encoding]::UTF8; $maps = @{}; $p = 0
+  $u = [Text.Encoding]::UTF8; $found = @{}; $p = 0
   while ($true) {
     $e = [Array]::IndexOf($t, [byte]0, $p); $ext = $u.GetString($t, $p, $e - $p); $p = $e + 1
     if (-not $ext) { break }
     while ($true) {
       $e = [Array]::IndexOf($t, [byte]0, $p); $path = $u.GetString($t, $p, $e - $p); $p = $e + 1
       if (-not $path) { break }
+      $take = $ext -eq $wantExt -and $path -eq $wantPath
       while ($true) {
         $e = [Array]::IndexOf($t, [byte]0, $p); $name = $u.GetString($t, $p, $e - $p); $p = $e + 1
         if (-not $name) { break }
         $pre = [BitConverter]::ToUInt16($t, $p + 4)
-        if ($ext -eq "vpk" -and $path -eq "maps" -and $name -notmatch 'skybox|3dsky') { $maps[$name] = [BitConverter]::ToUInt32($t, $p + 12) + $pre }
+        if ($take) {
+          $found[$name] = @{ Arch = [BitConverter]::ToUInt16($t, $p + 6); Offset = [BitConverter]::ToUInt32($t, $p + 8)
+                             Length = [BitConverter]::ToUInt32($t, $p + 12); Preload = $t[($p + 18)..($p + 17 + $pre)]
+                             DataStart = $head + $size }   # archive 0x7FFF = data right after the tree
+          if ($pre -eq 0) { $found[$name].Preload = [byte[]]@() }
+        }
         $p += 18 + $pre
       }
     }
   }
+  $found
+}
+
+# the bytes of one entry from Vpk-Entries
+function Vpk-Read([string]$dirFile, $entry) {
+  $src = if ($entry.Arch -eq 0x7FFF) { $dirFile } else { $dirFile -replace '_dir\.vpk$', ('_{0:000}.vpk' -f $entry.Arch) }
+  $off = if ($entry.Arch -eq 0x7FFF) { $entry.DataStart + $entry.Offset } else { $entry.Offset }
+  $fs = [IO.File]::OpenRead($src)
+  try {
+    $buf = New-Object byte[] $entry.Length
+    [void]$fs.Seek($off, "Begin"); [void]$fs.Read($buf, 0, $buf.Length)
+  } finally { $fs.Dispose() }
+  if (-not $entry.Preload.Count) { return ,$buf }
+  # Array.Copy, not '+': PowerShell would build an object array of every byte
+  $all = New-Object byte[] ($entry.Preload.Count + $buf.Length)
+  [Array]::Copy([byte[]]$entry.Preload, $all, $entry.Preload.Count)
+  [Array]::Copy($buf, 0, $all, $entry.Preload.Count, $buf.Length)
+  ,$all
+}
+
+# map names in a VPK directory: maps/<name>.vpk -> size (the biggest one is the map, others are its 3D sky)
+function Vpk-Maps([string]$file) {
+  $maps = @{}
+  foreach ($kv in (Vpk-Entries $file "vpk" "maps").GetEnumerator()) {
+    if ($kv.Key -notmatch 'skybox|3dsky') { $maps[$kv.Key] = $kv.Value.Length + $kv.Value.Preload.Count }
+  }
   $maps
+}
+
+# the maps that come with CS2: game\csgo\maps\<name>.vpk, without menu / preview / vanity ones
+function Official-Maps($s) {
+  if (-not $s.Cs2Path) { return }
+  $dir = Join-Path $s.Cs2Path "game\csgo\maps"
+  if (-not (Test-Path $dir)) { return }
+  $fix = @{ "dust2" = "Dust II" }
+  foreach ($f in Get-ChildItem $dir -Filter "*.vpk") {
+    $map = $f.BaseName
+    if ($map -notmatch '^(de|cs|ar|dz|gd)_' -or $map -match '_vanity$') { continue }
+    $words = ($map -replace '^[a-z]+_', '') -split '_' | ForEach-Object { if ($fix[$_]) { $fix[$_] } else { $_.Substring(0, 1).ToUpper() + $_.Substring(1) } }
+    [pscustomobject]@{ Kind = "official"; Id = $map; Title = $words -join ' '; Map = $map; Preview = Join-Path $Data "maps\$map.png" }
+  }
 }
 
 # subscribed CS2 workshop items that hold a map: Id, Title, Map (the name the console knows), Preview file
@@ -220,7 +269,7 @@ function Workshop-Maps($s) {
     $title = $map
     $pd = Join-Path $d.FullName "publish_data.txt"
     if ((Test-Path $pd) -and ((Get-Content $pd -Raw -Encoding UTF8) -match '"title"\s+"([^"]+)"')) { $title = $Matches[1] }
-    [pscustomobject]@{ Id = $d.Name; Title = $title; Map = $map; Preview = Join-Path $Data "ws\$($d.Name).img" }
+    [pscustomobject]@{ Kind = "workshop"; Id = $d.Name; Title = $title; Map = $map; Preview = Join-Path $Data "ws\$($d.Name).img" }
   }
 }
 
@@ -243,22 +292,42 @@ function Write-WsCfg($s, [string]$cfg) {
   [IO.File]::WriteAllLines((Join-Path $cfg "fd_ws_list.cfg"), [string[]]$list)
 }
 
-# preview pictures from the Steam Workshop (public API, no key) into Documents\FakeDemo\ws\<id>.img
+# map previews into Documents\FakeDemo: official ones straight from the game (the 360p menu
+# screenshot is a PNG inside its .vtex_c), workshop ones from the public Steam API, all at once
 function Fetch-Previews($s) {
-  $dir = Join-Path $Data "ws"
-  New-Item -ItemType Directory -Force $dir | Out-Null
+  $need = @(Official-Maps $s | Where-Object { -not (Test-Path $_.Preview) })
+  if ($need) {
+    New-Item -ItemType Directory -Force (Join-Path $Data "maps") | Out-Null
+    $pak = Join-Path $s.Cs2Path "game\csgo\pak01_dir.vpk"
+    $shots = Vpk-Entries $pak "vtex_c" "panorama/images/map_icons/screenshots/360p"
+    foreach ($m in $need) {
+      $e = $shots["$($m.Map)_png"]
+      if (-not $e) { continue }
+      $tex = Vpk-Read $pak $e
+      $start = [BitConverter]::ToUInt32($tex, 0)   # resource size: the picture follows it
+      if ($tex.Length -gt $start + 8 -and $tex[$start] -eq 0x89 -and $tex[$start + 1] -eq 0x50) {
+        $out = [IO.File]::Create($m.Preview)
+        try { $out.Write($tex, $start, $tex.Length - $start) } finally { $out.Dispose() }
+      }
+    }
+  }
+
   $need = @(Workshop-Maps $s | Where-Object { -not (Test-Path $_.Preview) })
   if (-not $need) { return }
+  New-Item -ItemType Directory -Force (Join-Path $Data "ws") | Out-Null
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  [Net.ServicePointManager]::DefaultConnectionLimit = 16   # .NET Framework allows 2 per host by default
   $body = "itemcount=$($need.Count)"
   for ($i = 0; $i -lt $need.Count; $i++) { $body += "&publishedfileids[$i]=$($need[$i].Id)" }
   $r = Invoke-RestMethod -Method Post -Uri "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/" -Body $body -ContentType "application/x-www-form-urlencoded"
-  $web = New-Object Net.WebClient
-  foreach ($x in $r.response.publishedfiledetails) {
+  $jobs = foreach ($x in $r.response.publishedfiledetails) {
     if (-not $x.preview_url) { continue }
-    $dst = Join-Path $dir "$($x.publishedfileid).img"
+    $dst = Join-Path $Data "ws\$($x.publishedfileid).img"
     # .part first: the launcher never reads half a file
-    try { $web.DownloadFile($x.preview_url, "$dst.part"); Move-Item "$dst.part" $dst -Force } catch { }
+    @{ Dst = $dst; Task = (New-Object Net.WebClient).DownloadFileTaskAsync($x.preview_url, "$dst.part") }
+  }
+  foreach ($j in $jobs) {
+    try { $j.Task.Wait(); Move-Item "$($j.Dst).part" $j.Dst -Force } catch { }
   }
 }
 
@@ -407,9 +476,10 @@ function Launch-Args($s) {
     if ($s.NetconPassword) { $a += "-netconpassword", $s.NetconPassword }
   }
   if ($s.LaunchOptions) { $a += ($s.LaunchOptions -split '\s+' | Where-Object { $_ }) }
-  # a workshop map needs the custom mode from exec fd, or fd_fake.cfg does not run on it
-  if ($s.ExecFd -or $s.WorkshopMap) { $a += "+exec", "fd" }
-  if ($s.WorkshopMap) { $a += "+host_workshop_map", $s.WorkshopMap }
+  # a map needs the custom mode from exec fd, or fd_fake.cfg does not run on it
+  if ($s.ExecFd -or $s.MapId) { $a += "+exec", "fd" }
+  if ($s.MapId -and $s.MapKind -eq "workshop") { $a += "+host_workshop_map", $s.MapId }
+  elseif ($s.MapId) { $a += "+map", $s.MapId }
   $a
 }
 
