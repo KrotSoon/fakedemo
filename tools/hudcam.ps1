@@ -7,7 +7,7 @@
 #   tools\hudcam.ps1 -Commands "find panorama" -Frames 0            # console reply only
 #   several commands: one string with ";" (the console splits it; -File glues arrays with ",")
 #
-# Port / password: the launcher session in Documents\FakeDemo\last.log, or -Port / -Password.
+# Port / password: the running cs2's command line (or Documents\FakeDemo\last.log), or -Port / -Password.
 param(
   [string[]]$Commands = @(),
   [int]$Frames = 1,
@@ -31,6 +31,11 @@ public static class HudWin {
 }
 "@
 
+# the running game's own command line first (last.log is rewritten by any fakedemo.ps1 command)
+$cl = (Get-CimInstance Win32_Process -Filter "Name='cs2.exe'" | Select-Object -First 1).CommandLine
+if (-not $Port -and $cl -match '-netconport (\d+)(?: -netconpassword (\S+))?') {
+  $Port = [int]$Matches[1]; $Password = $Matches[2]
+}
 if (-not $Port) {
   $log = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "FakeDemo\last.log"
   $m = Select-String -Path $log -Pattern '-netconport (\d+)(?: -netconpassword (\S+))?' | Select-Object -Last 1

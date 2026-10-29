@@ -9,7 +9,7 @@
 
 /* Panorama clips every panel's children to its box: the menu sliding in from the left went past the
    left edge of the position wrappers and a hovered row (+12px) past the right edge of the rows */
-.Root, #posx, #posy, #poss, .Rows, .SettingsPanel {
+.Root, #posx, #posy, #poss, .Rows, .SettingsPanel, .Row {
     overflow: noclip;
 }
 
@@ -236,7 +236,14 @@
     }
 }
 
-/* ---- rows ---- */
+/* ---- rows ----
+   .Row is a plain wrapper around each row button: the entrance animates the wrapper, hover and press
+   animate the button, so a row hovered while it comes in does not jump when the entrance ends */
+.Row {
+    width: 100%;
+    height: fit-children;
+}
+
 .Item {
     width: 100%;
     height: 48px;
@@ -512,23 +519,23 @@
     0% { opacity: 0; transform: translateX(-8px); }
     100% { opacity: 1; transform: translateX(0px); }
 }
-#menu.SwapA .Item { animation-name: fm-in-a; }
+#menu.SwapA .Row { animation-name: fm-in-a; }
 #menu.SwapA .Slider { animation-name: fm-in-a; }
 #menu.SwapA .Title { animation-name: fm-title-a; }
-#menu.SwapB .Item { animation-name: fm-in-b; }
+#menu.SwapB .Row { animation-name: fm-in-b; }
 #menu.SwapB .Slider { animation-name: fm-in-b; }
 #menu.SwapB .Title { animation-name: fm-title-b; }
-.Item, .Slider, .Title {
+.Row, .Slider, .Title {
     animation-duration: .3s;
     animation-timing-function: ease-out;
     animation-fill-mode: backwards;
 }
 .Title { animation-duration: .22s; }
-#b2, #sly { animation-delay: .025s; }
-#b3, #sls { animation-delay: .05s; }
-#b4, #sb { animation-delay: .075s; }
-#b5 { animation-delay: .1s; }
-#b6 { animation-delay: .125s; }
-#b7 { animation-delay: .15s; }
-#b8 { animation-delay: .175s; }
-#b9 { animation-delay: .2s; }
+#r2, #sly { animation-delay: .025s; }
+#r3, #sls { animation-delay: .05s; }
+#r4, #rsb { animation-delay: .075s; }
+#r5 { animation-delay: .1s; }
+#r6 { animation-delay: .125s; }
+#r7 { animation-delay: .15s; }
+#r8 { animation-delay: .175s; }
+#r9 { animation-delay: .2s; }

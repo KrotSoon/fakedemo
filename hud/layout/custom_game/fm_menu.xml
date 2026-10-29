@@ -16,15 +16,15 @@
 				<Button id="bg" class="Tool"><Label text="⚙" /></Button>
 			</Panel>
 			<Panel id="rows" class="Rows">
-				<Button id="b1" class="Item"><Panel class="Key"><Label text="1" /></Panel><Label class="ItemText" text="{s:t1}" /></Button>
-				<Button id="b2" class="Item"><Panel class="Key"><Label text="2" /></Panel><Label class="ItemText" text="{s:t2}" /></Button>
-				<Button id="b3" class="Item"><Panel class="Key"><Label text="3" /></Panel><Label class="ItemText" text="{s:t3}" /></Button>
-				<Button id="b4" class="Item"><Panel class="Key"><Label text="4" /></Panel><Label class="ItemText" text="{s:t4}" /></Button>
-				<Button id="b5" class="Item"><Panel class="Key"><Label text="5" /></Panel><Label class="ItemText" text="{s:t5}" /></Button>
-				<Button id="b6" class="Item"><Panel class="Key"><Label text="6" /></Panel><Label class="ItemText" text="{s:t6}" /></Button>
-				<Button id="b7" class="Item"><Panel class="Key"><Label text="7" /></Panel><Label class="ItemText" text="{s:t7}" /></Button>
-				<Button id="b8" class="Item"><Panel class="Key"><Label text="8" /></Panel><Label class="ItemText" text="{s:t8}" /></Button>
-				<Button id="b9" class="Item Close"><Panel class="Key"><Label text="9" /></Panel><Label class="ItemText" text="{s:t9}" /></Button>
+				<Panel id="r1" class="Row"><Button id="b1" class="Item"><Panel class="Key"><Label text="1" /></Panel><Label class="ItemText" text="{s:t1}" /></Button></Panel>
+				<Panel id="r2" class="Row"><Button id="b2" class="Item"><Panel class="Key"><Label text="2" /></Panel><Label class="ItemText" text="{s:t2}" /></Button></Panel>
+				<Panel id="r3" class="Row"><Button id="b3" class="Item"><Panel class="Key"><Label text="3" /></Panel><Label class="ItemText" text="{s:t3}" /></Button></Panel>
+				<Panel id="r4" class="Row"><Button id="b4" class="Item"><Panel class="Key"><Label text="4" /></Panel><Label class="ItemText" text="{s:t4}" /></Button></Panel>
+				<Panel id="r5" class="Row"><Button id="b5" class="Item"><Panel class="Key"><Label text="5" /></Panel><Label class="ItemText" text="{s:t5}" /></Button></Panel>
+				<Panel id="r6" class="Row"><Button id="b6" class="Item"><Panel class="Key"><Label text="6" /></Panel><Label class="ItemText" text="{s:t6}" /></Button></Panel>
+				<Panel id="r7" class="Row"><Button id="b7" class="Item"><Panel class="Key"><Label text="7" /></Panel><Label class="ItemText" text="{s:t7}" /></Button></Panel>
+				<Panel id="r8" class="Row"><Button id="b8" class="Item"><Panel class="Key"><Label text="8" /></Panel><Label class="ItemText" text="{s:t8}" /></Button></Panel>
+				<Panel id="r9" class="Row"><Button id="b9" class="Item Close"><Panel class="Key"><Label text="9" /></Panel><Label class="ItemText" text="{s:t9}" /></Button></Panel>
 			</Panel>
 			<Panel id="settings" class="SettingsPanel">
 				<Panel id="slx" class="Slider V0">
@@ -180,7 +180,7 @@
 						</Panel>
 					</Panel>
 				</Panel>
-				<Button id="sb" class="Item Close"><Label class="ItemText" text="← Back" /></Button>
+				<Panel id="rsb" class="Row"><Button id="sb" class="Item Close"><Label class="ItemText" text="← Back" /></Button></Panel>
 			</Panel>
 		</Panel>
 		</Panel>

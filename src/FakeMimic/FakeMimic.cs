@@ -606,6 +606,7 @@ public partial class FakeMimic : BasePlugin
         // the pick may open another screen (Show keeps the menu and replays the entrance); if it does
         // not (an action, a name asked in chat), the menu closes
         _menu = null;
+        _awaitText = null;   // a chat question belongs to the screen it was asked on
         item.Pick(p);
         if (_menu == null) CloseMenu(p);
     }
@@ -635,8 +636,7 @@ public partial class FakeMimic : BasePlugin
         // most used first: movements and folder right under recording
         if (_recName == null)
             // with bots assigned they start in the same tick as the recording, so it lines up with them later
-            items.Add(new("Record new movement", pl => AskText(pl, "name of the movement",
-                (pl2, n) => Say(pl2, _replays.Count > 0 ? RecordOver(n) : StartRec(n) + " H > 1 to stop"))));
+            items.Add(new("Record new movement", NewMovementMenu));
         else
             items.Add(new($"Stop and save '{_recName}'", pl => { Say(pl, StopRec()); MainMenu(pl); }, Accent: true));
         items.Add(new("Movements in this folder", RecordingsMenu));
@@ -651,6 +651,25 @@ public partial class FakeMimic : BasePlugin
         items.AddRange(_addonItems.Take(Math.Max(0, 7 - items.Count)));
         items.Add(new("Clear bot assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
         Show(p, new Menu("FakeMimic", items, Main: true));
+    }
+
+    // a name is optional: 1 records under the next free default name (m1, m2, ...), or a name typed in
+    // chat while this screen is open starts the recording under that name
+    void NewMovementMenu(CCSPlayerController p)
+    {
+        var name = NextName();
+        void Record(CCSPlayerController pl, string n)
+        {
+            Say(pl, _replays.Count > 0 ? RecordOver(n) : StartRec(n) + " H > 1 to stop");
+            if (_menu != null) CloseMenu(pl);   // typed in chat: the menu is still open
+        }
+        Show(p, new Menu("New movement", new List<MenuItem>
+        {
+            new($"Record as '{name}'", pl => Record(pl, name)),
+            new("← Back", MainMenu),
+        }));
+        _awaitText = Record;
+        Say(p, $"1 = record as '{name}', or type your own name in chat");
     }
 
     void CategoriesMenu(CCSPlayerController p)
@@ -688,7 +707,7 @@ public partial class FakeMimic : BasePlugin
     {
         var p = caller ?? LocalHuman();
         if (p == null) return;
-        if (_menu != null) CloseMenu(p); else MainMenu(p);
+        if (_menu != null) { _awaitText = null; CloseMenu(p); } else MainMenu(p);
     }
 
     [ConsoleCommand("fm_k1", "")] public void K1(CCSPlayerController? c, CommandInfo _) => PickFor(c, 1);
