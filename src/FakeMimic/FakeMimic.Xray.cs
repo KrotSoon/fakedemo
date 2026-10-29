@@ -14,7 +14,7 @@ namespace FakeMimic;
 // so the radar shows it (CS2 has no mp_radar_showall). The copy follows the bot through a hidden relay prop (FollowEntity on the copy itself
 // does not take the animation). Only the human player is sent these props: GOTV never gets them, so
 // the demo shows ordinary bots.
-// On by itself while a movement is recorded over running bots (can be switched off on the
+// On by itself while a movement is recorded over running bots or a take runs (can be switched off on the
 // New movement screen); fm_xray keeps it on all the time, e.g. to watch the bots run.
 
 public partial class FakeMimic
@@ -34,7 +34,7 @@ public partial class FakeMimic
     static readonly Color GlowT = Color.FromArgb(255, 255, 150, 40);
     static readonly Color GlowCT = Color.FromArgb(255, 90, 160, 255);
 
-    bool XrayWanted => _xrayAlways || (_xrayWhileRecording && _recName != null && _replays.Any(r => r.Running));
+    bool XrayWanted => _xrayAlways || (_xrayWhileRecording && (_recName != null || _take != null) && _replays.Any(r => r.Running));
 
     void LoadXray()
     {
