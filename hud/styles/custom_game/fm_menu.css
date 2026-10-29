@@ -334,7 +334,7 @@
 #menu.Settings .SettingsPanel { height: fit-children; overflow: noclip; opacity: 1; }
 
 .Slider {
-    width: 100%;
+    width: 336px;   /* the panel's 348 px minus the side margins: 100% + margins ran 12 px past the edge */
     flow-children: down;
     margin: 6px 6px 14px 6px;
 }
