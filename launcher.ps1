@@ -403,7 +403,10 @@ function Animate-In($panel) {
   foreach ($c in $panel.Children) {
     if ($c.Visibility -ne "Visible") { continue }
     if (-not ($c.RenderTransform -is [Windows.Media.TranslateTransform])) { $c.RenderTransform = New-Object Windows.Media.TranslateTransform }
-    # hidden and shifted until its own turn comes: before BeginTime an animation shows the base value
+    # hidden and shifted until its own turn comes. The previous entrance still holds 1 / 0 and a new
+    # delayed animation would keep showing that snapshot, so it is removed first; then the base value shows
+    $c.BeginAnimation([Windows.UIElement]::OpacityProperty, $null)
+    $c.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, $null)
     $c.Opacity = 0; $c.RenderTransform.X = -30
     $c.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 220 (40 * $i)))
     $c.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -30 0 380 (40 * $i) 0.6))
