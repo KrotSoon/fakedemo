@@ -1,5 +1,6 @@
-﻿# FakeDemo launcher window, styled like the FakeMimic in-game menu (glass panel, CS2 gold, springy rows).
-# Started by FakeDemo.cmd. All work is done by fakedemo.ps1: 'play' runs as its own hidden process,
+﻿# FakeDemo launcher window. Same look as the FakeMimic menu (glass, CS2 gold, soft corners, springy
+# motion), its own layout: one big Play button, the two choices people change often, everything else under the gear.
+# Started by FakeDemo.cmd. The work is done by fakedemo.ps1: 'play' runs as its own hidden process,
 # so plugins still come out after CS2 closes even if this window is closed earlier.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -9,54 +10,91 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="FakeDemo" Width="468" SizeToContent="Height" WindowStyle="None" AllowsTransparency="True"
+        Title="FakeDemo" Width="452" SizeToContent="Height" WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
   <Window.Resources>
     <SolidColorBrush x:Key="Gold" Color="#E4AE39"/>
-    <SolidColorBrush x:Key="RowHover" Color="#38E4AE39"/>
-    <SolidColorBrush x:Key="KeyHover" Color="#E4AE39"/>
+    <SolidColorBrush x:Key="Text" Color="#E8E8EC"/>
+    <SolidColorBrush x:Key="Dim" Color="#80FFFFFF"/>
+    <BackEase x:Key="Spring" EasingMode="EaseOut" Amplitude="0.7"/>
 
-    <!-- one menu row: key badge with the digit (Tag), text and value (Content) -->
-    <Style x:Key="Row" TargetType="Button">
-      <Setter Property="Height" Value="48"/>
-      <Setter Property="Margin" Value="0,6,0,0"/>
-      <Setter Property="Foreground" Value="#E8E8EC"/>
-      <Setter Property="FontSize" Value="17"/>
+    <!-- the one big action -->
+    <Style x:Key="Play" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Focusable" Value="False"/>
+      <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="bg" CornerRadius="14" Background="#0DFFFFFF" Padding="14,0">
-              <DockPanel>
-                <Border x:Name="key" DockPanel.Dock="Left" Width="28" Height="28" CornerRadius="9" Background="#1AFFFFFF"
-                        Margin="0,0,14,0" RenderTransformOrigin="0.5,0.5">
-                  <Border.RenderTransform><ScaleTransform x:Name="keyScale"/></Border.RenderTransform>
-                  <TextBlock x:Name="keyText" Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             FontSize="14" FontWeight="Bold" Foreground="#C0FFFFFF"/>
-                </Border>
-                <ContentPresenter VerticalAlignment="Center"/>
-              </DockPanel>
+            <Border x:Name="bg" CornerRadius="16" Background="#E4AE39" Padding="20,12">
+              <Border.Effect><DropShadowEffect x:Name="glow" BlurRadius="24" ShadowDepth="0" Color="#E4AE39" Opacity="0.25"/></Border.Effect>
+              <ContentPresenter HorizontalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bg" Property="Background" Value="{DynamicResource RowHover}"/>
-                <Setter TargetName="key" Property="Background" Value="{DynamicResource KeyHover}"/>
-                <Setter TargetName="keyText" Property="Foreground" Value="#11141A"/>
+                <Setter TargetName="bg" Property="Background" Value="#F0BD4F"/>
                 <Trigger.EnterActions><BeginStoryboard><Storyboard>
-                  <DoubleAnimation Storyboard.TargetName="keyScale" Storyboard.TargetProperty="ScaleX" To="1.15" Duration="0:0:0.3">
-                    <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.8"/></DoubleAnimation.EasingFunction></DoubleAnimation>
-                  <DoubleAnimation Storyboard.TargetName="keyScale" Storyboard.TargetProperty="ScaleY" To="1.15" Duration="0:0:0.3">
-                    <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.8"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+                  <DoubleAnimation Storyboard.TargetName="glow" Storyboard.TargetProperty="Opacity" To="0.55" Duration="0:0:0.25"/>
                 </Storyboard></BeginStoryboard></Trigger.EnterActions>
                 <Trigger.ExitActions><BeginStoryboard><Storyboard>
-                  <DoubleAnimation Storyboard.TargetName="keyScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.2"/>
-                  <DoubleAnimation Storyboard.TargetName="keyScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.2"/>
+                  <DoubleAnimation Storyboard.TargetName="glow" Storyboard.TargetProperty="Opacity" To="0.25" Duration="0:0:0.25"/>
                 </Storyboard></BeginStoryboard></Trigger.ExitActions>
               </Trigger>
-              <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="bg" Property="Background" Value="#60E4AE39"/>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bg" Property="Background" Value="#24E4AE39"/>
+                <Setter TargetName="bg" Property="Effect" Value="{x:Null}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <EventTrigger RoutedEvent="MouseEnter"><BeginStoryboard><Storyboard>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1.03" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1.03" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+        </Storyboard></BeginStoryboard></EventTrigger>
+        <EventTrigger RoutedEvent="MouseLeave"><BeginStoryboard><Storyboard>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+        </Storyboard></BeginStoryboard></EventTrigger>
+        <EventTrigger RoutedEvent="PreviewMouseLeftButtonDown"><BeginStoryboard><Storyboard>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="0.97" Duration="0:0:0.06"/>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="0.97" Duration="0:0:0.06"/>
+        </Storyboard></BeginStoryboard></EventTrigger>
+        <EventTrigger RoutedEvent="PreviewMouseLeftButtonUp"><BeginStoryboard><Storyboard>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1.03" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1.03" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+        </Storyboard></BeginStoryboard></EventTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- on / off switch: gold track, knob springs across -->
+    <Style x:Key="Switch" TargetType="CheckBox">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <Border x:Name="track" Width="42" Height="24" CornerRadius="12" Background="#24FFFFFF">
+              <Border x:Name="knob" Width="18" Height="18" CornerRadius="9" Background="White" HorizontalAlignment="Left" Margin="3,0,0,0">
+                <Border.RenderTransform><TranslateTransform x:Name="pos"/></Border.RenderTransform>
+                <Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.4"/></Border.Effect>
+              </Border>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="track" Property="Background" Value="#E4AE39"/>
+                <Trigger.EnterActions><BeginStoryboard><Storyboard>
+                  <DoubleAnimation Storyboard.TargetName="pos" Storyboard.TargetProperty="X" To="18" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+                </Storyboard></BeginStoryboard></Trigger.EnterActions>
+                <Trigger.ExitActions><BeginStoryboard><Storyboard>
+                  <DoubleAnimation Storyboard.TargetName="pos" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.3" EasingFunction="{StaticResource Spring}"/>
+                </Storyboard></BeginStoryboard></Trigger.ExitActions>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="knob" Property="Background" Value="#FFD98A"/>
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.35"/>
@@ -65,25 +103,92 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           </ControlTemplate>
         </Setter.Value>
       </Setter>
+    </Style>
+
+    <!-- one-click choice (map, account) -->
+    <Style x:Key="Chip" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Margin" Value="0,6,6,0"/>
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="bg" CornerRadius="10" Background="#14FFFFFF" Padding="12,6">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#38E4AE39"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#E4AE39"/>
+                <Setter Property="Foreground" Value="#11141A"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
       <Style.Triggers>
-        <EventTrigger RoutedEvent="MouseEnter"><BeginStoryboard><Storyboard>
-          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.X" To="12" Duration="0:0:0.3">
-            <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.6"/></DoubleAnimation.EasingFunction></DoubleAnimation>
-        </Storyboard></BeginStoryboard></EventTrigger>
-        <EventTrigger RoutedEvent="MouseLeave"><BeginStoryboard><Storyboard>
-          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.X" To="0" Duration="0:0:0.3">
-            <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.6"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+        <EventTrigger RoutedEvent="Checked"><BeginStoryboard><Storyboard>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" From="0.9" To="1" Duration="0:0:0.35" EasingFunction="{StaticResource Spring}"/>
+          <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" From="0.9" To="1" Duration="0:0:0.35" EasingFunction="{StaticResource Spring}"/>
         </Storyboard></BeginStoryboard></EventTrigger>
       </Style.Triggers>
     </Style>
 
-    <!-- stop / remove: red like FakeMimic's Accent rows -->
-    <Style x:Key="Accent" TargetType="Button" BasedOn="{StaticResource Row}">
-      <Setter Property="Foreground" Value="#FF8170"/>
-      <Style.Resources>
-        <SolidColorBrush x:Key="RowHover" Color="#38FF6A55"/>
-        <SolidColorBrush x:Key="KeyHover" Color="#FF6A55"/>
-      </Style.Resources>
+    <!-- small text action: footer links, Back -->
+    <Style x:Key="Link" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="9" Background="Transparent" Padding="10,6">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#14FFFFFF"/>
+                <Setter Property="Foreground" Value="#E4AE39"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- small boxed action: Browse, remove plugins (red via Tag="danger") -->
+    <Style x:Key="Small" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="10" Background="#14FFFFFF" Padding="12,7">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#E4AE39"/>
+                <Setter Property="Foreground" Value="#11141A"/>
+              </Trigger>
+              <Trigger Property="Tag" Value="danger">
+                <Setter TargetName="bg" Property="Background" Value="#FF6A55"/>
+                <Setter Property="Foreground" Value="#11141A"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
 
     <Style x:Key="Tool" TargetType="Button">
@@ -115,11 +220,11 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
       <Setter Property="Foreground" Value="White"/>
       <Setter Property="CaretBrush" Value="#E4AE39"/>
       <Setter Property="SelectionBrush" Value="#E4AE39"/>
-      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontSize" Value="14"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
-            <Border x:Name="b" CornerRadius="10" Background="#14FFFFFF" BorderBrush="#00E4AE39" BorderThickness="1" Padding="10,6">
+            <Border x:Name="b" CornerRadius="10" Background="#14FFFFFF" BorderBrush="#00E4AE39" BorderThickness="1" Padding="10,7">
               <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
@@ -131,31 +236,135 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         </Setter.Value>
       </Setter>
     </Style>
+
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Background" Value="#0DFFFFFF"/>
+      <Setter Property="Padding" Value="14,12"/>
+      <Setter Property="Margin" Value="0,10,0,0"/>
+    </Style>
+    <Style x:Key="Label" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="15"/>
+    </Style>
+    <Style x:Key="Hint" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="Caption" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#B0FFFFFF"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Margin" Value="2,12,0,4"/>
+    </Style>
   </Window.Resources>
 
   <Border x:Name="Panel" Margin="24" CornerRadius="20" Background="#F2161A22" BorderBrush="#2AFFFFFF" BorderThickness="1"
-          Padding="16,20,16,14" Opacity="0">
+          Padding="18,18,18,12" Opacity="0">
     <Border.Effect><DropShadowEffect BlurRadius="40" ShadowDepth="12" Direction="270" Opacity="0.45" Color="Black"/></Border.Effect>
     <Border.RenderTransform><TranslateTransform x:Name="PanelShift" X="-40"/></Border.RenderTransform>
     <StackPanel>
-      <DockPanel x:Name="Header" Margin="8,0,6,10" Background="Transparent">
-        <Button x:Name="BtnClose" DockPanel.Dock="Right" Style="{StaticResource Tool}" Content="&#x2715;"/>
-        <Button x:Name="BtnGear" DockPanel.Dock="Right" Style="{StaticResource Tool}" Content="&#x2699;"/>
+      <DockPanel x:Name="Header" Margin="2,0,0,14" Background="Transparent">
+        <Button x:Name="BtnClose" DockPanel.Dock="Right" Style="{StaticResource Tool}" Content="&#x2715;" ToolTip="Закрыть (Esc)"/>
+        <Button x:Name="BtnGear" DockPanel.Dock="Right" Style="{StaticResource Tool}" Content="&#x2699;" ToolTip="Настройки"/>
         <StackPanel>
-          <TextBlock x:Name="Brand" Foreground="{StaticResource Gold}" FontSize="12" FontWeight="Bold"/>
-          <TextBlock x:Name="Title" Foreground="White" FontSize="26" FontWeight="Bold"/>
+          <TextBlock x:Name="Brand" Foreground="{StaticResource Gold}" FontSize="11" FontWeight="Bold"/>
+          <TextBlock x:Name="Title" Foreground="White" FontSize="24" FontWeight="Bold" Text="Fake demo"/>
         </StackPanel>
       </DockPanel>
-      <StackPanel x:Name="Rows"/>
-      <Border Margin="0,14,0,0" CornerRadius="12" Background="#0DFFFFFF" Padding="12,10">
-        <StackPanel>
+
+      <!-- ===== main ===== -->
+      <StackPanel x:Name="Main">
+        <Button x:Name="BtnPlay" Style="{StaticResource Play}" ToolTip="Enter">
+          <Button.RenderTransform><ScaleTransform/></Button.RenderTransform>
+          <StackPanel>
+            <TextBlock x:Name="PlayText" Text="Играть" FontSize="22" FontWeight="Bold" Foreground="#11141A" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="PlaySub" FontSize="12" Foreground="#B011141A" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+
+        <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+          <StackPanel>
+            <DockPanel>
+              <CheckBox x:Name="SwPlugins" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+              <StackPanel>
+                <TextBlock Style="{StaticResource Label}" Text="Боты повторяют движения"/>
+                <TextBlock x:Name="PluginsHint" Style="{StaticResource Hint}"/>
+              </StackPanel>
+            </DockPanel>
+            <DockPanel Margin="0,12,0,0">
+              <CheckBox x:Name="SwDirector" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+              <StackPanel>
+                <TextBlock Style="{StaticResource Label}" Text="Журнал дублей"/>
+                <TextBlock Style="{StaticResource Hint}" Text="FakeDirector: список дублей в меню H"/>
+              </StackPanel>
+            </DockPanel>
+          </StackPanel>
+        </Border>
+
+        <TextBlock Style="{StaticResource Caption}" Text="Карта"/>
+        <WrapPanel x:Name="Maps" Margin="0,-6,0,0"/>
+
+        <Border x:Name="StatusCard" Style="{StaticResource Card}" Margin="0,14,0,0">
           <DockPanel>
+            <Button x:Name="BtnOff" DockPanel.Dock="Right" Style="{StaticResource Small}" Tag="danger" Content="Снять плагины"
+                    Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
             <Ellipse x:Name="Dot" Width="9" Height="9" Margin="0,5,10,0" VerticalAlignment="Top" Fill="#5BD08A"/>
-            <TextBlock x:Name="StatusText" Foreground="#E8E8EC" FontSize="14" TextWrapping="Wrap"/>
+            <StackPanel>
+              <TextBlock x:Name="StatusText" Foreground="{StaticResource Text}" FontSize="13" TextWrapping="Wrap"/>
+              <TextBlock x:Name="LogText" Style="{StaticResource Hint}" Margin="0,3,0,0" Visibility="Collapsed"/>
+            </StackPanel>
           </DockPanel>
-          <TextBlock x:Name="LogText" Foreground="#80FFFFFF" FontSize="12" Margin="19,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
-        </StackPanel>
-      </Border>
+        </Border>
+
+        <DockPanel Margin="-6,8,-6,0">
+          <Button x:Name="BtnUpdate" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Проверить обновления"/>
+          <Button x:Name="BtnFolder" Style="{StaticResource Link}" Content="Папка записей" HorizontalAlignment="Left"/>
+        </DockPanel>
+      </StackPanel>
+
+      <!-- ===== settings ===== -->
+      <StackPanel x:Name="Settings" Visibility="Collapsed">
+        <TextBlock Style="{StaticResource Caption}" Text="Папка CS2" Margin="2,0,0,4"/>
+        <DockPanel>
+          <Button x:Name="BtnBrowse" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="Обзор" Margin="8,0,0,0"/>
+          <TextBox x:Name="TbCs2" Style="{StaticResource Field}" IsReadOnly="True"/>
+        </DockPanel>
+
+        <TextBlock Style="{StaticResource Caption}" Text="Аккаунт Steam (бинды для unfake, права в плагинах)"/>
+        <WrapPanel x:Name="Accounts" Margin="0,-6,0,0"/>
+
+        <TextBlock Style="{StaticResource Caption}" Text="Свои параметры запуска"/>
+        <TextBox x:Name="TbOptions" Style="{StaticResource Field}"/>
+        <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="-insecure добавляется сам, когда включены плагины"/>
+
+        <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+          <DockPanel>
+            <CheckBox x:Name="SwExecFd" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Label}" Text="exec fd при запуске"/>
+              <TextBlock Style="{StaticResource Hint}" Text="GOTV и режим custom включаются сами, карта грузится сразу"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="118"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <TextBlock Style="{StaticResource Caption}" Text="Порт netcon"/>
+          <TextBlock Grid.Column="1" Style="{StaticResource Caption}" Text="Пароль"/>
+        </Grid>
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <TextBox x:Name="TbPort" Style="{StaticResource Field}"/>
+          <TextBox x:Name="TbPass" Grid.Column="2" Style="{StaticResource Field}"/>
+        </Grid>
+        <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="для HLAE-инструментов; порт 0 = выключено"/>
+
+        <DockPanel Margin="-6,14,-6,0">
+          <Button x:Name="BtnBinds" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Обновить бинды для unfake"/>
+          <Button x:Name="BtnBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
+        </DockPanel>
+      </StackPanel>
     </StackPanel>
   </Border>
 </Window>
@@ -163,120 +372,23 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
 $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
 function El([string]$n) { $win.FindName($n) }
-$rows = El "Rows"
 $gold = $win.Resources["Gold"]
-$grey = [Windows.Media.BrushConverter]::new().ConvertFromString("#80FFFFFF")
 
 $script:s = Load-Settings
 $script:accounts = @(try { Steam-Accounts } catch { })
 $script:proc = $null        # running 'fakedemo.ps1 play'
-$script:screen = "main"
-$script:update = $null      # newer release found by the update row
-$script:items = @{}         # digit -> button of the current screen
-# what a row / field does, by control: handlers made with GetNewClosure() would lose this script's functions
-$script:picks = @{}
-$script:saves = @{}
+$script:updProc = $null     # running 'fakedemo.ps1 update'
+$script:update = $null      # newer release found by the background check
+$script:loading = $true     # controls are being filled: their change events are not user choices
 
 (El "Brand").Text = "F A K E D E M O    $Version"
 
-# ---------------- rows ----------------
+$Maps = [ordered]@{ "" = "Меню"; "de_mirage" = "Mirage"; "de_inferno" = "Inferno"; "de_dust2" = "Dust II"; "de_nuke" = "Nuke";
+                    "de_ancient" = "Ancient"; "de_anubis" = "Anubis"; "de_train" = "Train"; "de_overpass" = "Overpass" }
 
-function Add-Row([string]$key, [string]$text, [string]$value, [scriptblock]$pick, [switch]$Accent, [switch]$Close) {
-  $b = New-Object Windows.Controls.Button
-  $b.Style = $win.Resources[$(if ($Accent) { "Accent" } else { "Row" })]
-  $b.Tag = $key
-  $b.RenderTransform = New-Object Windows.Media.TranslateTransform
-  $dock = New-Object Windows.Controls.DockPanel
-  $v = New-Object Windows.Controls.TextBlock
-  $v.Text = $value; $v.Foreground = $gold; $v.FontSize = 15; $v.FontWeight = "Bold"; $v.Margin = "10,0,0,0"
-  [Windows.Controls.DockPanel]::SetDock($v, "Right")
-  $t = New-Object Windows.Controls.TextBlock
-  $t.Text = $text; $t.TextTrimming = "CharacterEllipsis"
-  [void]$dock.Children.Add($v); [void]$dock.Children.Add($t)
-  $b.Content = $dock
-  if ($Close) { $b.Margin = "0,12,0,0"; $b.Height = 40; $b.Foreground = $grey; $b.FontSize = 15 }
-  $script:picks[$b] = $pick
-  $b.Add_Click({ param($sender) try { & $script:picks[$sender] } catch { Show-Error $_.Exception.Message } })
-  [void]$rows.Children.Add($b)
-  $script:items[$key] = $b
-  [pscustomobject]@{ Button = $b; Value = $v; Text = $t }
-}
+function Save { if (-not $script:loading) { Save-Settings $script:s } }
 
-# a text field row for the settings screen; $save gets the new text
-function Add-Field([string]$text, [string]$value, [scriptblock]$save) {
-  $p = New-Object Windows.Controls.StackPanel
-  $p.Margin = "0,8,0,0"
-  $l = New-Object Windows.Controls.TextBlock
-  $l.Text = $text; $l.Foreground = "#B0FFFFFF"; $l.FontSize = 13; $l.Margin = "6,0,0,4"
-  $box = New-Object Windows.Controls.TextBox
-  $box.Style = $win.Resources["Field"]; $box.Text = $value
-  $script:saves[$box] = $save
-  $box.Add_LostFocus({ param($sender) & $script:saves[$sender] $sender.Text.Trim(); Save-Settings $script:s })
-  [void]$p.Children.Add($l); [void]$p.Children.Add($box)
-  [void]$rows.Children.Add($p)
-}
-
-function OnOff([bool]$on) { if ($on) { "ВКЛ" } else { "ВЫКЛ" } }
-
-function Set-Toggle($row, [bool]$on) { $row.Value.Text = OnOff $on; $row.Value.Foreground = $(if ($on) { $gold } else { $grey }) }
-
-function Account-Name {
-  $a = $script:accounts | Where-Object Id -eq $script:s.SteamAccount | Select-Object -First 1
-  if (-not $a) { $a = $script:accounts | Select-Object -First 1 }
-  if ($a) { $a.Name } else { "не найден" }
-}
-
-function Short([string]$path) { if ($path.Length -gt 26) { "…" + $path.Substring($path.Length - 25) } else { $path } }
-
-function Show-Main {
-  $script:screen = "main"; $script:items = @{}; $rows.Children.Clear()
-  (El "Title").Text = "Запуск"
-  $s = $script:s
-  $script:play = Add-Row "1" "Запустить CS2" $(if ($s.Plugins) { "с плагинами" } else { "только cfg" }) { Start-Play }
-  $r = Add-Row "2" "Плагины FakeMimic" "" {
-    $script:s.Plugins = -not $script:s.Plugins; Save-Settings $script:s; Show-Main }
-  Set-Toggle $r $s.Plugins
-  $r = Add-Row "3" "FakeDirector (журнал дублей)" "" {
-    $script:s.FakeDirector = -not $script:s.FakeDirector; Save-Settings $script:s; Show-Main }
-  Set-Toggle $r $s.FakeDirector
-  $r.Button.IsEnabled = [bool]$s.Plugins
-  $r = Add-Row "4" "exec fd и карта при запуске" "" {
-    $script:s.ExecFd = -not $script:s.ExecFd; Save-Settings $script:s; Show-Main }
-  Set-Toggle $r $s.ExecFd
-  if ($s.ExecFd -and $s.Map) { $r.Value.Text = $s.Map }
-  [void](Add-Row "5" "Папка записей и дублей" "" { New-Item -ItemType Directory -Force $Data | Out-Null; Start-Process explorer.exe $Data })
-  [void](Add-Row "6" "Обновить бинды для unfake" "" { Install-Cfg $script:s; Show-Info "Конфиги и fd_unfake.cfg обновлены из твоих биндов Steam" })
-  $script:updRow = Add-Row "7" "Проверить обновления" $(if ($script:update) { "→ $($script:update.Version)" } else { "" }) { Check-Update }
-  $script:offRow = Add-Row "8" "Снять плагины сейчас" "" { Plugins-Off $script:s; Show-Info "Плагины сняты, CS2 чиста"; Refresh } -Accent
-  [void](Add-Row "9" "Закрыть" "" { $win.Close() } -Close)
-  Animate-Rows
-  Refresh
-}
-
-function Show-Settings {
-  $script:screen = "settings"; $script:items = @{}; $rows.Children.Clear()
-  (El "Title").Text = "Настройки"
-  $r = Add-Row "1" "Папка CS2" (Short $script:s.Cs2Path) {
-    $d = New-Object System.Windows.Forms.FolderBrowserDialog
-    $d.Description = "Папка Counter-Strike Global Offensive"
-    $d.SelectedPath = $script:s.Cs2Path
-    if ($d.ShowDialog() -eq "OK") {
-      if (-not (Test-Path (Join-Path $d.SelectedPath "game\csgo\gameinfo.gi"))) { Show-Error "Это не папка CS2: нет game\csgo\gameinfo.gi"; return }
-      $script:s.Cs2Path = $d.SelectedPath; Save-Settings $script:s; Show-Settings
-    } }
-  $r = Add-Row "2" "Аккаунт Steam" (Account-Name) {
-    if ($script:accounts.Count -lt 2) { return }
-    $ids = @($script:accounts | ForEach-Object Id)
-    $i = [array]::IndexOf($ids, $script:s.SteamAccount)
-    $script:s.SteamAccount = $ids[($i + 1) % $ids.Count]; Save-Settings $script:s; Show-Settings }
-  Add-Field "Карта при запуске (пусто = главное меню)" $script:s.Map { param($v) $script:s.Map = $v }
-  Add-Field "Свои параметры запуска (-insecure ставится сам)" $script:s.LaunchOptions { param($v) $script:s.LaunchOptions = $v }
-  Add-Field "Порт netcon для HLAE-инструментов (0 = выкл)" ([string]$script:s.NetconPort) {
-    param($v) $n = 0; if ([int]::TryParse($v, [ref]$n)) { $script:s.NetconPort = $n } }
-  Add-Field "Пароль netcon" $script:s.NetconPassword { param($v) $script:s.NetconPassword = $v }
-  [void](Add-Row "9" "← Назад" "" { Show-Main } -Close)
-  Animate-Rows
-}
+# ---------------- animation ----------------
 
 function Anim([double]$from, [double]$to, [int]$ms, [int]$delay = 0, [double]$bounce = 0) {
   $a = New-Object Windows.Media.Animation.DoubleAnimation
@@ -287,16 +399,92 @@ function Anim([double]$from, [double]$to, [int]$ms, [int]$delay = 0, [double]$bo
   $a
 }
 
-# rows arrive one after another with a little bounce, like the in-game menu
-function Animate-Rows {
+# blocks of a screen arrive one after another with a little bounce, like the FakeMimic menu rows
+function Animate-In($panel) {
   $i = 0
-  foreach ($c in $rows.Children) {
-    $c.Opacity = 0
-    if (-not ($c.RenderTransform -is [Windows.Media.TranslateTransform])) { $c.RenderTransform = New-Object Windows.Media.TranslateTransform }
-    $c.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 220 (35 * $i)))
-    $c.RenderTransform.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -30 0 380 (35 * $i) 0.6))
+  foreach ($c in $panel.Children) {
+    if ($c.Visibility -ne "Visible") { continue }
+    $t = New-Object Windows.Media.TranslateTransform
+    if ($c -is [Windows.Controls.Button] -and $c.RenderTransform -is [Windows.Media.ScaleTransform]) {
+      $g = New-Object Windows.Media.TransformGroup; $g.Children.Add($c.RenderTransform); $g.Children.Add($t)
+      $c.RenderTransform = $g
+    } elseif (-not ($c.RenderTransform -is [Windows.Media.TransformGroup])) { $c.RenderTransform = $t }
+    else { $t = $c.RenderTransform.Children[1] }
+    $c.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 220 (40 * $i)))
+    $t.BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -30 0 380 (40 * $i) 0.6))
     $i++
   }
+}
+
+# ---------------- filling ----------------
+
+function Add-Chip($panel, [string]$group, [string]$text, [string]$value, [bool]$checked) {
+  $c = New-Object Windows.Controls.RadioButton
+  $c.Style = $win.Resources["Chip"]; $c.GroupName = $group
+  $c.RenderTransform = New-Object Windows.Media.ScaleTransform   # before IsChecked: Checked animates its scale
+  $c.Content = $text; $c.Tag = $value; $c.IsChecked = $checked
+  [void]$panel.Children.Add($c)
+  $c
+}
+
+function Fill-Maps {
+  $p = El "Maps"; $p.Children.Clear()
+  $all = [ordered]@{}; foreach ($k in $Maps.Keys) { $all[$k] = $Maps[$k] }
+  if ($script:s.Map -and -not $all.Contains($script:s.Map)) { $all[$script:s.Map] = $script:s.Map }   # typed in settings.json
+  foreach ($k in $all.Keys) {
+    $c = Add-Chip $p "map" $all[$k] $k ($script:s.Map -eq $k)
+    $c.Add_Checked({ param($sender) $script:s.Map = $sender.Tag; Save; Update-Summary })
+  }
+}
+
+function Fill-Accounts {
+  $p = El "Accounts"; $p.Children.Clear()
+  $cur = (Pick-AccountSafe).Id
+  foreach ($a in $script:accounts) {
+    $c = Add-Chip $p "acc" $a.Name $a.Id ($a.Id -eq $cur)
+    $c.Add_Checked({ param($sender) $script:s.SteamAccount = $sender.Tag; Save })
+  }
+  if (-not $script:accounts) {
+    $t = New-Object Windows.Controls.TextBlock
+    $t.Style = $win.Resources["Hint"]; $t.Text = "Не найдено: запусти CS2 один раз обычным способом"
+    [void]$p.Children.Add($t)
+  }
+}
+
+function Pick-AccountSafe { try { Pick-Account $script:s } catch { [pscustomobject]@{ Id = "" } } }
+
+function Load-Controls {
+  $script:loading = $true
+  $s = $script:s
+  (El "SwPlugins").IsChecked = [bool]$s.Plugins
+  (El "SwDirector").IsChecked = [bool]$s.FakeDirector
+  (El "SwExecFd").IsChecked = [bool]$s.ExecFd
+  (El "TbCs2").Text = $s.Cs2Path
+  (El "TbOptions").Text = $s.LaunchOptions
+  (El "TbPort").Text = [string]$s.NetconPort
+  (El "TbPass").Text = $s.NetconPassword
+  Fill-Maps; Fill-Accounts
+  $script:loading = $false
+  Update-Summary
+}
+
+# what Play will do, in one line under the button
+function Update-Summary {
+  $s = $script:s
+  (El "SwDirector").IsEnabled = [bool]$s.Plugins
+  (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
+  $map = "главное меню"
+  if ($s.Map -and $s.ExecFd) { $map = $(if ($Maps[$s.Map]) { $Maps[$s.Map] } else { $s.Map }) }
+  (El "PlaySub").Text = "$map · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
+  (El "Maps").IsEnabled = [bool]$s.ExecFd
+}
+
+function Show-Screen([string]$name) {
+  $main = $name -eq "main"
+  (El "Main").Visibility = $(if ($main) { "Visible" } else { "Collapsed" })
+  (El "Settings").Visibility = $(if ($main) { "Collapsed" } else { "Visible" })
+  (El "Title").Text = $(if ($main) { "Fake demo" } else { "Настройки" })
+  Animate-In (El $(if ($main) { "Main" } else { "Settings" }))
 }
 
 # ---------------- actions ----------------
@@ -311,54 +499,78 @@ function Show-Info([string]$m) { Show-Line $m "#80FFFFFF" }
 
 function Playing { $script:proc -and -not $script:proc.HasExited }
 
+function Run-Hidden([string]$cmd) {
+  Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @(
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$(Join-Path $here 'fakedemo.ps1')`"", $cmd)
+}
+
 function Start-Play {
-  if (Playing) { return }
-  if (Cs2-Running) { Show-Error "CS2 уже запущена: закрой её, чтобы стартовать с FakeDemo"; return }
+  if (Playing -or -not (El "BtnPlay").IsEnabled) { return }
+  [Windows.Input.Keyboard]::ClearFocus()   # a field being edited saves on lost focus
   Save-Settings $script:s
   if (Test-Path $LogFile) { Remove-Item $LogFile }
-  $script:proc = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @(
-    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$(Join-Path $here 'fakedemo.ps1')`"", "play")
+  $script:proc = Run-Hidden "play"
   Refresh
 }
 
-function Check-Update {
+function Do-Update {
   if (Playing) { Show-Error "Сначала закрой CS2"; return }
-  if ($script:update) {
-    $p = Start-Process powershell.exe -WindowStyle Hidden -PassThru -Wait -ArgumentList @(
-      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$(Join-Path $here 'fakedemo.ps1')`"", "update")
-    if ($p.ExitCode -eq 0) {
-      Start-Process cmd.exe -WindowStyle Hidden -ArgumentList "/c", "`"$(Join-Path $here 'FakeDemo.cmd')`""
-      $win.Close()
-    } else { Show-Error (Get-Content $LogFile -Tail 1) }
-    return
-  }
-  try { $r = Latest-Release } catch { Show-Error "Не удалось проверить обновления: $($_.Exception.Message)"; return }
-  if ([version]$r.Version -gt [version]$Version) {
-    $script:update = $r
-    $script:updRow.Value.Text = "→ $($r.Version)"; $script:updRow.Text.Text = "Установить обновление"
-    Show-Info "Доступна версия $($r.Version). Нажми ещё раз, чтобы установить"
-  } else { Show-Info "У тебя последняя версия $Version" }
+  if (-not $script:update) { $script:checkAsked = $true; Start-Check -Force; Show-Info "Проверяю…"; return }
+  $script:updProc = Run-Hidden "update"
+  (El "BtnUpdate").Content = "Скачиваю $($script:update.Version)…"
 }
 
-# status line: plugins / CS2 / session, refreshed every second and a half
+# the GitHub check runs as its own process so the window opens at once
+function Start-Check([switch]$Force) {
+  $f = Join-Path $Data "latest.json"
+  if (-not $Force -and (Test-Path $f) -and ((Get-Date) - (Get-Item $f).LastWriteTime).TotalHours -lt 6) { return }
+  if (Test-Path $f) { Remove-Item $f }
+  $script:checkProc = Run-Hidden "check"
+}
+
+function Read-Check {
+  if ($script:checkProc -and -not $script:checkProc.HasExited) { return }
+  $f = Join-Path $Data "latest.json"
+  if (-not (Test-Path $f)) {
+    if ($script:checkProc) {
+      $script:checkProc = $null
+      if ($script:checkAsked) { Show-Info "Не удалось проверить обновления: нет связи с GitHub"; $script:checkAsked = $false }
+    }
+    return
+  }
+  if (-not $script:checkProc -and -not $script:checkAsked -and $script:update) { return }   # already shown
+  $script:checkProc = $null
+  $r = Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($r.Version -and [version]$r.Version -gt [version]$Version) {
+    $script:update = $r
+    $b = El "BtnUpdate"; $b.Content = "Обновить до $($r.Version)"; $b.Foreground = $gold
+  } elseif ($script:checkAsked) { Show-Info "У тебя последняя версия $Version" }
+  $script:checkAsked = $false
+}
+
+# status: plugins / CS2 / session, refreshed every second
 function Refresh {
-  $dot = El "Dot"; $txt = El "StatusText"
+  $dot = El "Dot"; $txt = El "StatusText"; $play = El "BtnPlay"; $off = El "BtnOff"
   try { $st = Status $script:s } catch {
-    $dot.Fill = "#FF6A55"; $txt.Text = "CS2 не найдена: укажи папку в настройках ⚙"; return
+    $dot.Fill = "#FF6A55"; $txt.Text = "CS2 не найдена: укажи папку в настройках"
+    $play.IsEnabled = $false; return
   }
   $playing = Playing
-  if ($script:play) { $script:play.Button.IsEnabled = -not $playing -and -not $st.Cs2Running }
-  if ($script:offRow) { $script:offRow.Button.Visibility = $(if ($st.PluginsOn -and -not $playing) { "Visible" } else { "Collapsed" }) }
+  $play.IsEnabled = -not $playing -and -not $st.Cs2Running
+  (El "PlayText").Text = if ($playing) { "Идёт сессия" } elseif ($st.Cs2Running) { "CS2 уже запущена" } else { "Играть" }
+  $off.Visibility = $(if ($st.PluginsOn -and -not $playing -and -not $st.Cs2Running) { "Visible" } else { "Collapsed" })
+  $card = El "StatusCard"
+  $card.Background = $(if ($st.PluginsOn -and -not $playing) { "#22FF6A55" } else { "#0DFFFFFF" })
   if ($playing) {
     $dot.Fill = $gold
-    $txt.Text = if ($st.Cs2Running) { "Идёт сессия. Плагины снимутся сами, когда ты закроешь CS2" } else { "Готовлю и запускаю CS2…" }
+    $txt.Text = if ($st.Cs2Running) { "Плагины снимутся сами, когда ты закроешь CS2" } else { "Готовлю и запускаю CS2…" }
   } elseif ($st.PluginsOn) {
     $dot.Fill = "#FF6A55"
-    $txt.Text = if ($st.Cs2Running) { "Плагины в игре, CS2 запущена. Только -insecure, никакого матчмейкинга" } else { "Плагины остались в игре! Не запускай CS2 из Steam: нажми 8" }
+    $txt.Text = if ($st.Cs2Running) { "Плагины в игре. Только -insecure, без матчмейкинга" } else { "Плагины остались в игре. Не запускай CS2 из Steam" }
   } elseif ($st.Cs2Running) {
     $dot.Fill = "#5BD08A"; $txt.Text = "CS2 запущена без плагинов"
   } else {
-    $dot.Fill = "#5BD08A"; $txt.Text = "Готово. Плагинов в игре нет"
+    $dot.Fill = "#5BD08A"; $txt.Text = "Готово к запуску. Плагинов в игре нет"
   }
   if ($script:proc -and $script:proc.HasExited -and -not $script:procSeen) {
     $script:procSeen = $true
@@ -368,54 +580,82 @@ function Refresh {
     $script:procSeen = $false
     Show-Info (Get-Content $LogFile -Tail 1 -Encoding UTF8)
   }
+  if ($script:updProc -and $script:updProc.HasExited) {
+    if ($script:updProc.ExitCode -eq 0) {
+      Start-Process cmd.exe -WindowStyle Hidden -ArgumentList "/c", "`"$(Join-Path $here 'FakeDemo.cmd')`""
+      $win.Close()
+    } else { Show-Error (Get-Content $LogFile -Tail 1 -Encoding UTF8); $script:updProc = $null }
+  }
+  Read-Check
 }
 
-# ---------------- window ----------------
+# ---------------- events ----------------
 
 (El "Header").Add_MouseLeftButtonDown({ $win.DragMove() })
 (El "BtnClose").Add_Click({ $win.Close() })
-(El "BtnGear").Add_Click({ if ($script:screen -eq "main") { Show-Settings } else { Show-Main } })
+(El "BtnGear").Add_Click({ Show-Screen $(if ((El "Main").Visibility -eq "Visible") { "settings" } else { "main" }) })
+(El "BtnBack").Add_Click({ Show-Screen "main" })
+(El "BtnPlay").Add_Click({ try { Start-Play } catch { Show-Error $_.Exception.Message } })
+(El "BtnOff").Add_Click({ try { Plugins-Off $script:s; Show-Info "Плагины сняты, CS2 чиста"; Refresh } catch { Show-Error $_.Exception.Message } })
+(El "BtnFolder").Add_Click({ New-Item -ItemType Directory -Force $Data | Out-Null; Start-Process explorer.exe $Data })
+(El "BtnUpdate").Add_Click({ try { Do-Update } catch { Show-Error $_.Exception.Message } })
+(El "BtnBinds").Add_Click({
+  try { Install-Cfg $script:s; Show-Screen "main"; Show-Info "Конфиги и fd_unfake.cfg обновлены из твоих биндов" } catch { Show-Error $_.Exception.Message } })
+(El "BtnBrowse").Add_Click({
+  $d = New-Object System.Windows.Forms.FolderBrowserDialog
+  $d.Description = "Папка Counter-Strike Global Offensive"
+  $d.SelectedPath = $script:s.Cs2Path
+  if ($d.ShowDialog() -ne "OK") { return }
+  if (-not (Test-Path (Join-Path $d.SelectedPath "game\csgo\gameinfo.gi"))) { Show-Error "Это не папка CS2: нет game\csgo\gameinfo.gi"; return }
+  $script:s.Cs2Path = $d.SelectedPath; (El "TbCs2").Text = $d.SelectedPath; Save; Refresh
+})
 
-# 1-9 pick rows like in game, Esc goes back / closes
+(El "SwPlugins").Add_Click({ $script:s.Plugins = [bool](El "SwPlugins").IsChecked; Save; Update-Summary })
+(El "SwDirector").Add_Click({ $script:s.FakeDirector = [bool](El "SwDirector").IsChecked; Save })
+(El "SwExecFd").Add_Click({ $script:s.ExecFd = [bool](El "SwExecFd").IsChecked; Save; Update-Summary })
+(El "TbOptions").Add_LostFocus({ $script:s.LaunchOptions = (El "TbOptions").Text.Trim(); Save })
+(El "TbPass").Add_LostFocus({ $script:s.NetconPassword = (El "TbPass").Text.Trim(); Save })
+(El "TbPort").Add_LostFocus({
+  $n = 0
+  if ([int]::TryParse((El "TbPort").Text.Trim(), [ref]$n) -and $n -ge 0) { $script:s.NetconPort = $n; Save }
+  else { (El "TbPort").Text = [string]$script:s.NetconPort }
+})
+
+# Enter = Play, Esc = back / close
 $win.Add_PreviewKeyDown({
   param($sender, $e)
   if ($e.OriginalSource -is [Windows.Controls.TextBox]) {
-    if ($e.Key -eq "Enter" -or $e.Key -eq "Escape") { [Windows.Input.Keyboard]::ClearFocus(); $rows.Focus() | Out-Null; $e.Handled = $true }
+    if ($e.Key -eq "Enter" -or $e.Key -eq "Escape") { [Windows.Input.Keyboard]::ClearFocus(); (El "Panel").Focus() | Out-Null; $e.Handled = $true }
     return
   }
-  if ($e.Key -eq "Escape") { if ($script:screen -eq "settings") { Show-Main } else { $win.Close() }; $e.Handled = $true; return }
-  $k = "$($e.Key)" -replace '^(D|NumPad)(\d)$', '$2'
-  $b = $script:items[$k]
-  if ($b -and $b.IsEnabled -and $b.Visibility -eq "Visible") {
-    $b.RaiseEvent((New-Object Windows.RoutedEventArgs ([Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
-    $e.Handled = $true
-  }
+  if ($e.Key -eq "Escape") { if ((El "Main").Visibility -ne "Visible") { Show-Screen "main" } else { $win.Close() }; $e.Handled = $true }
+  elseif ($e.Key -eq "Enter" -and (El "Main").Visibility -eq "Visible") { Start-Play; $e.Handled = $true }
 })
 
 $win.Add_Loaded({
   (El "Panel").BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0 1 200))
   (El "PanelShift").BeginAnimation([Windows.Media.TranslateTransform]::XProperty, (Anim -40 0 320 0 0.5))
+  Start-Check
+  (El "TbCs2").ScrollToHorizontalOffset([double]::MaxValue)   # the end of a long path is the useful part
 })
 
 $timer = New-Object Windows.Threading.DispatcherTimer
-$timer.Interval = [TimeSpan]::FromMilliseconds(1500)
+$timer.Interval = [TimeSpan]::FromMilliseconds(1000)
 $timer.Add_Tick({ Refresh })
 $timer.Start()
 
-Show-Main
-if (-not $script:s.Cs2Path) { Show-Settings }
+Load-Controls
+Refresh
+Show-Screen $(if ($script:s.Cs2Path -and $env:FAKEDEMO_SCREEN -ne "settings") { "main" } else { "settings" })
 
 # FAKEDEMO_SNAPSHOT=<png>: render the window once the animations settled and quit (layout checks)
 if ($env:FAKEDEMO_SNAPSHOT) {
-  if ($env:FAKEDEMO_SCREEN -eq "settings") { Show-Settings }
   $shot = New-Object Windows.Threading.DispatcherTimer
   $shot.Interval = [TimeSpan]::FromMilliseconds(1600)
   $shot.Add_Tick({
     $shot.Stop()
-    $panel = El "Panel"
     $bmp = New-Object Windows.Media.Imaging.RenderTargetBitmap ([int]$win.ActualWidth), ([int]$win.ActualHeight), 96, 96, ([Windows.Media.PixelFormats]::Pbgra32)
-    # dark backdrop like a desktop behind the glass
-    $v = New-Object Windows.Media.DrawingVisual
+    $v = New-Object Windows.Media.DrawingVisual   # dark desktop behind the glass
     $dc = $v.RenderOpen(); $dc.DrawRectangle("#2B3440", $null, (New-Object Windows.Rect 0, 0, $win.ActualWidth, $win.ActualHeight)); $dc.Close()
     $bmp.Render($v); $bmp.Render($win.Content)
     $enc = New-Object Windows.Media.Imaging.PngBitmapEncoder
@@ -425,5 +665,6 @@ if ($env:FAKEDEMO_SNAPSHOT) {
   })
   $shot.Start()
 }
+
 [void]$win.ShowDialog()
 $timer.Stop()

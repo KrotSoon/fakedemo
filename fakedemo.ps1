@@ -6,6 +6,7 @@
 #   fakedemo.ps1 status      what is installed where
 #   fakedemo.ps1 cfg         copy configs and rebuild fd_unfake.cfg from your Steam binds
 #   fakedemo.ps1 update      download the newest release from GitHub over this folder
+#   fakedemo.ps1 check       write the newest release to Documents\FakeDemo\latest.json (launcher, in background)
 #   fakedemo.ps1 uninstall   plugins off and configs removed from CS2
 #   fakedemo.ps1 migrate -From <old fakedemo folder>   move old recordings / takes to Documents\FakeDemo
 #   fakedemo.ps1 on          plugins on WITHOUT starting the game (advanced: remember to run off)
@@ -206,7 +207,8 @@ function Plugins-On($s) {
   Need-Closed
   $script:csgo = Csgo $s
   $gi = Join-Path $script:csgo "gameinfo.gi"
-  if ((Load-Manifest).Count) { Plugins-Off $s }
+  # ours from an earlier run, or the whole old fakedemo 0.5 install: out first
+  if ((Load-Manifest).Count -or (Test-Path (Join-Path $script:csgo "addons\counterstrikesharp\plugins\FakeMimic"))) { Plugins-Off $s }
   # a Metamod / CounterStrikeSharp we did not install: keep our hands off it
   foreach ($d in $OwnTrees) {
     if (Test-Path (Join-Path $script:csgo $d)) { throw "$d already exists in CS2 and was not installed by FakeDemo: run 'off' (removes old fakedemo installs) or remove it yourself" }
@@ -399,6 +401,8 @@ if ($MyInvocation.InvocationName -ne '.') {
       "cfg"       { Install-Cfg $s }
       "status"    { Status $s | Format-List }
       "update"    { Update }
+      # for the launcher: newest release into latest.json (no file = no answer)
+      "check"     { $r = Latest-Release; $r | ConvertTo-Json | Set-Content (Join-Path $Data "latest.json") -Encoding UTF8 }
       "uninstall" { Plugins-Off $s; foreach ($f in $CfgFiles) { $p = Join-Path (Csgo $s) "cfg\$f"; if (Test-Path $p) { Remove-Item $p } }; Log "FakeDemo removed from CS2 (your data stays in $Data)" }
       "migrate"   {
         if (-not $From) { throw "usage: fakedemo.ps1 migrate -From <old fakedemo folder>" }
