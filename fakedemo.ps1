@@ -287,7 +287,7 @@ function Write-WsCfg($s, [string]$cfg) {
   $i = 0
   foreach ($m in $maps) {
     $i++
-    $alias += "alias ws$i `"exec fd; host_workshop_map $($m.Id)`""
+    $alias += "alias ws$i `"exec fd; map_workshop $($m.Id) $($m.Map)`""
     $list += "echo `"  ws$i   $($m.Title -replace '[";]', "'")   ($($m.Map))`""
   }
   if (-not $i) { $list += 'echo "  none: subscribe to a map in the Steam Workshop"' }
@@ -517,7 +517,8 @@ function Netcon-Read($stream, [int]$quietMs, [int]$maxMs) {
   $out.ToString()
 }
 
-# host_workshop_map only works once the game runs its console and Steam has mounted the workshop
+# The client loads a workshop map with map_workshop <id> <map> (host_workshop_map is for dedicated
+# servers and does nothing here). It only works once the game runs its console and Steam has mounted the workshop
 # content, both after the command line ran. netcon accepts long before that and stays silent, so
 # readiness is an echo coming back; then the menu load settles and the map is typed in.
 # Everything the console says goes to Documents\FakeDemo\netcon.log.
@@ -549,9 +550,13 @@ function Load-WorkshopMap($s) {
     # 2. the main menu finished loading: console quiet for a while
     [void](Heard (Netcon-Read $st 4000 60000))
     # 3. the map; once more if the game said nothing about it
+    $map = (Workshop-Maps $s | Where-Object Id -eq $s.MapId | Select-Object -First 1).Map
+    if (-not $map) { Log "WARNING workshop item $($s.MapId) not found on disk: is it still subscribed?"; return }
+    Netcon-Send $st "find workshop"   # into netcon.log: which workshop commands this game build has
+    [void](Heard (Netcon-Read $st 1500 5000))
     for ($try = 1; $try -le 2; $try++) {
-      Log "loading workshop map $($s.MapTitle) ($($s.MapId))$(if ($try -gt 1) { ', again' })"
-      Netcon-Send $st "host_workshop_map $($s.MapId)"
+      Log "loading workshop map $($s.MapTitle): map_workshop $($s.MapId) $map$(if ($try -gt 1) { ', again' })"
+      Netcon-Send $st "map_workshop $($s.MapId) $map"
       $reply = Heard (Netcon-Read $st 5000 30000)
       $lines = @($reply -split "`r?`n" | Where-Object { $_ -match 'workshop|map|fail|error|unknown|loading|addon' } | Select-Object -First 6)
       foreach ($l in $lines) { Log "  game: $($l.Trim())" }
