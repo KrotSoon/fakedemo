@@ -8,3 +8,5 @@ dist/
 deps/*.zip
 FakeDemo.exe
 FakeDemo.old.exe
+# local archive of the pre-0.6 folder (not part of the repo)
+old/
