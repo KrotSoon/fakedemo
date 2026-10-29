@@ -576,7 +576,9 @@ function Refresh {
 
 # ---------------- events ----------------
 
-(El "Header").Add_MouseLeftButtonDown({ try { $win.DragMove() } catch { } })   # throws if the button is already up
+# the window moves by any empty spot of the panel, edges included (buttons, switches and fields
+# handle their own clicks, so this only gets what nobody took); DragMove throws if the button is already up
+(El "Panel").Add_MouseLeftButtonDown({ try { $win.DragMove() } catch { } })
 (El "BtnClose").Add_Click({ $win.Close() })
 (El "BtnGear").Add_Click({ Show-Screen $(if ((El "Main").Visibility -eq "Visible") { "settings" } else { "main" }) })
 (El "BtnBack").Add_Click({ Show-Screen "main" })
