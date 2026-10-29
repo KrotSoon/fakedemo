@@ -1,0 +1,16 @@
+# Changelog
+
+## 0.6.0
+- Лаунчер в стиле меню FakeMimic (`FakeDemo.cmd`): запуск CS2 с плагинами одной кнопкой, плагины снимаются сами после закрытия игры; настройки запуска в ⚙.
+- Один скрипт `fakedemo.ps1` вместо `plugins_on/off.ps1` и `make_unfake.ps1`; конфиги и `fd_unfake.cfg` ставятся в игру сами.
+- Путь к CS2 и аккаунт Steam определяются автоматически; `admins.json` собирается из твоего SteamID.
+- Плагины ставятся по манифесту и снимаются только свои файлы; чужие Metamod / CounterStrikeSharp не трогаются.
+- Данные (записи, дубли, настройки меню) в `Документы\FakeDemo`, а не в папке игры.
+- Зависимости скачиваются по `deps.json` с проверкой SHA256; маленький релиз ~1 МБ.
+- FakeMimic: новая команда `fm_kickall`, Backspace теперь убирает и ботов FakeMimic (раньше `bot_quota 0` при оставшихся ботах мог выкинуть GOTV).
+- FakeMimic: формат записей FMR2 с проверкой версии CS2-Bot-Controller; старые FMR1 читаются.
+- FakeMimicApi 2: `Version`, общий `FakeDemoPaths`; FakeDirector предупреждает о несовпадении версий.
+- `fd_help.cfg`: исправлена склеенная строка про ENTER; версия пакета видна в `exec fd`.
+
+## 0.5.0
+- FakeMimic 0.5, FakeDirector 0.1 (журнал дублей), меню H на custom HUD.

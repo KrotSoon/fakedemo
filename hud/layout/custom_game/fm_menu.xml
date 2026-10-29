@@ -1,0 +1,190 @@
+<root>
+	<styles>
+		<include src="file://{resources}/styles/custom_game/fm_menu.css" />
+	</styles>
+
+	<Panel class="Root" hittest="false">
+		<Panel id="posx" class="X20" hittest="false">
+		<Panel id="posy" class="Y20" hittest="false">
+		<Panel id="poss" class="S0" hittest="false">
+		<Panel id="menu" class="Hidden">
+			<Panel class="Header">
+				<Panel class="Heading">
+					<Label class="Brand" text="FAKEMIMIC" />
+					<Label id="title" class="Title" text="{s:title}" />
+				</Panel>
+				<Button id="bg" class="Tool"><Label text="⚙" /></Button>
+			</Panel>
+			<Panel id="rows" class="Rows">
+				<Button id="b1" class="Item"><Panel class="Key"><Label text="1" /></Panel><Label class="ItemText" text="{s:t1}" /></Button>
+				<Button id="b2" class="Item"><Panel class="Key"><Label text="2" /></Panel><Label class="ItemText" text="{s:t2}" /></Button>
+				<Button id="b3" class="Item"><Panel class="Key"><Label text="3" /></Panel><Label class="ItemText" text="{s:t3}" /></Button>
+				<Button id="b4" class="Item"><Panel class="Key"><Label text="4" /></Panel><Label class="ItemText" text="{s:t4}" /></Button>
+				<Button id="b5" class="Item"><Panel class="Key"><Label text="5" /></Panel><Label class="ItemText" text="{s:t5}" /></Button>
+				<Button id="b6" class="Item"><Panel class="Key"><Label text="6" /></Panel><Label class="ItemText" text="{s:t6}" /></Button>
+				<Button id="b7" class="Item"><Panel class="Key"><Label text="7" /></Panel><Label class="ItemText" text="{s:t7}" /></Button>
+				<Button id="b8" class="Item"><Panel class="Key"><Label text="8" /></Panel><Label class="ItemText" text="{s:t8}" /></Button>
+				<Button id="b9" class="Item Close"><Panel class="Key"><Label text="9" /></Panel><Label class="ItemText" text="{s:t9}" /></Button>
+			</Panel>
+			<Panel id="settings" class="SettingsPanel">
+				<Panel id="slx" class="Slider V0">
+					<Panel class="SliderHead"><Label class="SliderName" text="Horizontal" /><Label class="SliderValue" text="{s:vx}" /></Panel>
+					<Panel class="Track">
+						<Panel class="Bar" />
+						<Panel class="Fill" />
+						<Panel class="Knob" />
+						<Panel class="Hits">
+							<Button id="sx0" class="Hit" />
+							<Button id="sx1" class="Hit" />
+							<Button id="sx2" class="Hit" />
+							<Button id="sx3" class="Hit" />
+							<Button id="sx4" class="Hit" />
+							<Button id="sx5" class="Hit" />
+							<Button id="sx6" class="Hit" />
+							<Button id="sx7" class="Hit" />
+							<Button id="sx8" class="Hit" />
+							<Button id="sx9" class="Hit" />
+							<Button id="sx10" class="Hit" />
+							<Button id="sx11" class="Hit" />
+							<Button id="sx12" class="Hit" />
+							<Button id="sx13" class="Hit" />
+							<Button id="sx14" class="Hit" />
+							<Button id="sx15" class="Hit" />
+							<Button id="sx16" class="Hit" />
+							<Button id="sx17" class="Hit" />
+							<Button id="sx18" class="Hit" />
+							<Button id="sx19" class="Hit" />
+							<Button id="sx20" class="Hit" />
+							<Button id="sx21" class="Hit" />
+							<Button id="sx22" class="Hit" />
+							<Button id="sx23" class="Hit" />
+							<Button id="sx24" class="Hit" />
+							<Button id="sx25" class="Hit" />
+							<Button id="sx26" class="Hit" />
+							<Button id="sx27" class="Hit" />
+							<Button id="sx28" class="Hit" />
+							<Button id="sx29" class="Hit" />
+							<Button id="sx30" class="Hit" />
+							<Button id="sx31" class="Hit" />
+							<Button id="sx32" class="Hit" />
+							<Button id="sx33" class="Hit" />
+							<Button id="sx34" class="Hit" />
+							<Button id="sx35" class="Hit" />
+							<Button id="sx36" class="Hit" />
+							<Button id="sx37" class="Hit" />
+							<Button id="sx38" class="Hit" />
+							<Button id="sx39" class="Hit" />
+							<Button id="sx40" class="Hit" />
+						</Panel>
+					</Panel>
+				</Panel>
+				<Panel id="sly" class="Slider V0">
+					<Panel class="SliderHead"><Label class="SliderName" text="Vertical" /><Label class="SliderValue" text="{s:vy}" /></Panel>
+					<Panel class="Track">
+						<Panel class="Bar" />
+						<Panel class="Fill" />
+						<Panel class="Knob" />
+						<Panel class="Hits">
+							<Button id="sy0" class="Hit" />
+							<Button id="sy1" class="Hit" />
+							<Button id="sy2" class="Hit" />
+							<Button id="sy3" class="Hit" />
+							<Button id="sy4" class="Hit" />
+							<Button id="sy5" class="Hit" />
+							<Button id="sy6" class="Hit" />
+							<Button id="sy7" class="Hit" />
+							<Button id="sy8" class="Hit" />
+							<Button id="sy9" class="Hit" />
+							<Button id="sy10" class="Hit" />
+							<Button id="sy11" class="Hit" />
+							<Button id="sy12" class="Hit" />
+							<Button id="sy13" class="Hit" />
+							<Button id="sy14" class="Hit" />
+							<Button id="sy15" class="Hit" />
+							<Button id="sy16" class="Hit" />
+							<Button id="sy17" class="Hit" />
+							<Button id="sy18" class="Hit" />
+							<Button id="sy19" class="Hit" />
+							<Button id="sy20" class="Hit" />
+							<Button id="sy21" class="Hit" />
+							<Button id="sy22" class="Hit" />
+							<Button id="sy23" class="Hit" />
+							<Button id="sy24" class="Hit" />
+							<Button id="sy25" class="Hit" />
+							<Button id="sy26" class="Hit" />
+							<Button id="sy27" class="Hit" />
+							<Button id="sy28" class="Hit" />
+							<Button id="sy29" class="Hit" />
+							<Button id="sy30" class="Hit" />
+							<Button id="sy31" class="Hit" />
+							<Button id="sy32" class="Hit" />
+							<Button id="sy33" class="Hit" />
+							<Button id="sy34" class="Hit" />
+							<Button id="sy35" class="Hit" />
+							<Button id="sy36" class="Hit" />
+							<Button id="sy37" class="Hit" />
+							<Button id="sy38" class="Hit" />
+							<Button id="sy39" class="Hit" />
+							<Button id="sy40" class="Hit" />
+						</Panel>
+					</Panel>
+				</Panel>
+				<Panel id="sls" class="Slider V0">
+					<Panel class="SliderHead"><Label class="SliderName" text="Size" /><Label class="SliderValue" text="{s:vs}" /></Panel>
+					<Panel class="Track">
+						<Panel class="Bar" />
+						<Panel class="Fill" />
+						<Panel class="Knob" />
+						<Panel class="Hits">
+							<Button id="ss0" class="Hit" />
+							<Button id="ss1" class="Hit" />
+							<Button id="ss2" class="Hit" />
+							<Button id="ss3" class="Hit" />
+							<Button id="ss4" class="Hit" />
+							<Button id="ss5" class="Hit" />
+							<Button id="ss6" class="Hit" />
+							<Button id="ss7" class="Hit" />
+							<Button id="ss8" class="Hit" />
+							<Button id="ss9" class="Hit" />
+							<Button id="ss10" class="Hit" />
+							<Button id="ss11" class="Hit" />
+							<Button id="ss12" class="Hit" />
+							<Button id="ss13" class="Hit" />
+							<Button id="ss14" class="Hit" />
+							<Button id="ss15" class="Hit" />
+							<Button id="ss16" class="Hit" />
+							<Button id="ss17" class="Hit" />
+							<Button id="ss18" class="Hit" />
+							<Button id="ss19" class="Hit" />
+							<Button id="ss20" class="Hit" />
+							<Button id="ss21" class="Hit" />
+							<Button id="ss22" class="Hit" />
+							<Button id="ss23" class="Hit" />
+							<Button id="ss24" class="Hit" />
+							<Button id="ss25" class="Hit" />
+							<Button id="ss26" class="Hit" />
+							<Button id="ss27" class="Hit" />
+							<Button id="ss28" class="Hit" />
+							<Button id="ss29" class="Hit" />
+							<Button id="ss30" class="Hit" />
+							<Button id="ss31" class="Hit" />
+							<Button id="ss32" class="Hit" />
+							<Button id="ss33" class="Hit" />
+							<Button id="ss34" class="Hit" />
+							<Button id="ss35" class="Hit" />
+							<Button id="ss36" class="Hit" />
+							<Button id="ss37" class="Hit" />
+							<Button id="ss38" class="Hit" />
+							<Button id="ss39" class="Hit" />
+							<Button id="ss40" class="Hit" />
+						</Panel>
+					</Panel>
+				</Panel>
+				<Button id="sb" class="Item Close"><Label class="ItemText" text="← Back" /></Button>
+			</Panel>
+		</Panel>
+		</Panel>
+		</Panel>
+		</Panel>
+	</Panel>
+</root>

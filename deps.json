@@ -1,0 +1,18 @@
+{
+  "repo": "OWNER/fakedemo",
+  "release": "deps-1",
+  "items": [
+    { "name": "Metamod:Source", "version": "2.0.0-git1483", "file": "mmsource-2.0.0-git1483-windows.zip",
+      "sha256": "5A5B61413EEB4C204050D7CCA83D28C5C707D9EDD5E74D4FC9F96CDE147C5341",
+      "source": "https://mms.alliedmods.net/mmsdrop/2.0/" },
+    { "name": "CounterStrikeSharp (with .NET runtime)", "version": "1.0.378", "file": "counterstrikesharp-with-runtime-windows-1.0.378.zip",
+      "sha256": "6784CC463E8A85E5E70D41C4190601AC4D93295AE7EBDD1E12B6BB92F861AE02",
+      "source": "https://github.com/roflmuffin/CounterStrikeSharp/releases/tag/v1.0.378" },
+    { "name": "CS2-Bot-Controller (Metamod)", "version": "0.7.2", "file": "BotController-MM-windows-0.7.2.zip",
+      "sha256": "378FC882A2F6C00F227164D6536913C5ACC5A7B479626FDA0629FBEEB53E69D4",
+      "source": "CS2-Bot-Controller 0.7.2, AGPL" },
+    { "name": "CS2-Bot-Controller (CSS API)", "version": "0.7.2", "file": "BotController-CSS-API-0.7.2.zip",
+      "sha256": "BA9AAE741714A7EC21DB54407E1B32FB349DABDBFEF6675398AAF9C4502BCF89",
+      "source": "CS2-Bot-Controller 0.7.2, AGPL" }
+  ]
+}

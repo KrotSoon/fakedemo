@@ -1,0 +1,9 @@
+* text=auto
+# Windows scripts and game configs stay CRLF on every checkout
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.cfg text eol=crlf
+*.dll binary
+*.vxml_c binary
+*.vcss_c binary
+*.fmr binary

@@ -1,0 +1,486 @@
+/* FakeMimic menu: soft modern glass panel, CS2 gold accent, springy motion without 3D.
+   Position (Pos0..Pos5) and size (Size0..Size2) classes are switched by the plugin
+   from the two tool buttons in the header (the HUD has no drag events). */
+
+.Root {
+    width: 100%;
+    height: 100%;
+}
+
+#menu {
+    width: 380px;
+    height: fit-children;
+    flow-children: down;
+    padding: 20px 16px 14px 16px;
+
+    /* glass */
+    background-color: #161a22a0;
+    backdrop-filter: blur(14px);
+    background-blur: fastgaussian(6, 6, 4);
+    border: 1px solid #ffffff2a;
+    border-radius: 20px;
+    box-shadow: #00000066 0px 12px 40px 0px;
+
+    transition-property: opacity, transform;
+    transition-duration: .32s;
+    transition-timing-function: cubic-bezier(.2, 1.5, .35, 1);
+    opacity: 1;
+    transform: translateX(0px);
+
+    &.Hidden {
+        opacity: 0;
+        transform: translateX(-40px);
+        transition-duration: .14s;
+        transition-timing-function: ease-in;
+    }
+}
+
+/* ---- position and size: set from the Settings sliders ----
+   Margins do not animate in Panorama, so the position is two wrapper panels moved with transforms:
+   The wrappers fill the screen (fit-children clipped the rows) and stay click-through;
+   #posx carries X0..X10 (translateX, 2.5% of 1920 per step), #posy carries Y0..Y10 (translateY, 2.5% of 1080 per step);
+   X20/Y20 put the top-left corner on the crosshair, #poss carries S0..S10 (scale from the top-left corner). */
+#posx, #posy, #poss {
+    width: 100%;
+    height: 100%;
+    horizontal-align: left;
+    vertical-align: top;
+    transition-property: transform;
+    transition-duration: .38s;
+    transition-timing-function: cubic-bezier(.2, 1.4, .35, 1);
+}
+#poss { transform-origin: 0% 0%; }
+#menu { horizontal-align: left; vertical-align: top; }
+#posx.X0 { transform: translateX(0px); }
+#posx.X1 { transform: translateX(48px); }
+#posx.X2 { transform: translateX(96px); }
+#posx.X3 { transform: translateX(144px); }
+#posx.X4 { transform: translateX(192px); }
+#posx.X5 { transform: translateX(240px); }
+#posx.X6 { transform: translateX(288px); }
+#posx.X7 { transform: translateX(336px); }
+#posx.X8 { transform: translateX(384px); }
+#posx.X9 { transform: translateX(432px); }
+#posx.X10 { transform: translateX(480px); }
+#posx.X11 { transform: translateX(528px); }
+#posx.X12 { transform: translateX(576px); }
+#posx.X13 { transform: translateX(624px); }
+#posx.X14 { transform: translateX(672px); }
+#posx.X15 { transform: translateX(720px); }
+#posx.X16 { transform: translateX(768px); }
+#posx.X17 { transform: translateX(816px); }
+#posx.X18 { transform: translateX(864px); }
+#posx.X19 { transform: translateX(912px); }
+#posx.X20 { transform: translateX(960px); }
+#posx.X21 { transform: translateX(1008px); }
+#posx.X22 { transform: translateX(1056px); }
+#posx.X23 { transform: translateX(1104px); }
+#posx.X24 { transform: translateX(1152px); }
+#posx.X25 { transform: translateX(1200px); }
+#posx.X26 { transform: translateX(1248px); }
+#posx.X27 { transform: translateX(1296px); }
+#posx.X28 { transform: translateX(1344px); }
+#posx.X29 { transform: translateX(1392px); }
+#posx.X30 { transform: translateX(1440px); }
+#posx.X31 { transform: translateX(1488px); }
+#posx.X32 { transform: translateX(1536px); }
+#posx.X33 { transform: translateX(1584px); }
+#posx.X34 { transform: translateX(1632px); }
+#posx.X35 { transform: translateX(1680px); }
+#posx.X36 { transform: translateX(1728px); }
+#posx.X37 { transform: translateX(1776px); }
+#posx.X38 { transform: translateX(1824px); }
+#posx.X39 { transform: translateX(1872px); }
+#posx.X40 { transform: translateX(1920px); }
+#posy.Y0 { transform: translateY(0px); }
+#posy.Y1 { transform: translateY(27px); }
+#posy.Y2 { transform: translateY(54px); }
+#posy.Y3 { transform: translateY(81px); }
+#posy.Y4 { transform: translateY(108px); }
+#posy.Y5 { transform: translateY(135px); }
+#posy.Y6 { transform: translateY(162px); }
+#posy.Y7 { transform: translateY(189px); }
+#posy.Y8 { transform: translateY(216px); }
+#posy.Y9 { transform: translateY(243px); }
+#posy.Y10 { transform: translateY(270px); }
+#posy.Y11 { transform: translateY(297px); }
+#posy.Y12 { transform: translateY(324px); }
+#posy.Y13 { transform: translateY(351px); }
+#posy.Y14 { transform: translateY(378px); }
+#posy.Y15 { transform: translateY(405px); }
+#posy.Y16 { transform: translateY(432px); }
+#posy.Y17 { transform: translateY(459px); }
+#posy.Y18 { transform: translateY(486px); }
+#posy.Y19 { transform: translateY(513px); }
+#posy.Y20 { transform: translateY(540px); }
+#posy.Y21 { transform: translateY(567px); }
+#posy.Y22 { transform: translateY(594px); }
+#posy.Y23 { transform: translateY(621px); }
+#posy.Y24 { transform: translateY(648px); }
+#posy.Y25 { transform: translateY(675px); }
+#posy.Y26 { transform: translateY(702px); }
+#posy.Y27 { transform: translateY(729px); }
+#posy.Y28 { transform: translateY(756px); }
+#posy.Y29 { transform: translateY(783px); }
+#posy.Y30 { transform: translateY(810px); }
+#posy.Y31 { transform: translateY(837px); }
+#posy.Y32 { transform: translateY(864px); }
+#posy.Y33 { transform: translateY(891px); }
+#posy.Y34 { transform: translateY(918px); }
+#posy.Y35 { transform: translateY(945px); }
+#posy.Y36 { transform: translateY(972px); }
+#posy.Y37 { transform: translateY(999px); }
+#posy.Y38 { transform: translateY(1026px); }
+#posy.Y39 { transform: translateY(1053px); }
+#posy.Y40 { transform: translateY(1080px); }
+#poss.S0 { transform: scale3d(0.700, 0.700, 1); }
+#poss.S1 { transform: scale3d(0.715, 0.715, 1); }
+#poss.S2 { transform: scale3d(0.730, 0.730, 1); }
+#poss.S3 { transform: scale3d(0.745, 0.745, 1); }
+#poss.S4 { transform: scale3d(0.760, 0.760, 1); }
+#poss.S5 { transform: scale3d(0.775, 0.775, 1); }
+#poss.S6 { transform: scale3d(0.790, 0.790, 1); }
+#poss.S7 { transform: scale3d(0.805, 0.805, 1); }
+#poss.S8 { transform: scale3d(0.820, 0.820, 1); }
+#poss.S9 { transform: scale3d(0.835, 0.835, 1); }
+#poss.S10 { transform: scale3d(0.850, 0.850, 1); }
+#poss.S11 { transform: scale3d(0.865, 0.865, 1); }
+#poss.S12 { transform: scale3d(0.880, 0.880, 1); }
+#poss.S13 { transform: scale3d(0.895, 0.895, 1); }
+#poss.S14 { transform: scale3d(0.910, 0.910, 1); }
+#poss.S15 { transform: scale3d(0.925, 0.925, 1); }
+#poss.S16 { transform: scale3d(0.940, 0.940, 1); }
+#poss.S17 { transform: scale3d(0.955, 0.955, 1); }
+#poss.S18 { transform: scale3d(0.970, 0.970, 1); }
+#poss.S19 { transform: scale3d(0.985, 0.985, 1); }
+#poss.S20 { transform: scale3d(1.000, 1.000, 1); }
+#poss.S21 { transform: scale3d(1.015, 1.015, 1); }
+#poss.S22 { transform: scale3d(1.030, 1.030, 1); }
+#poss.S23 { transform: scale3d(1.045, 1.045, 1); }
+#poss.S24 { transform: scale3d(1.060, 1.060, 1); }
+#poss.S25 { transform: scale3d(1.075, 1.075, 1); }
+#poss.S26 { transform: scale3d(1.090, 1.090, 1); }
+#poss.S27 { transform: scale3d(1.105, 1.105, 1); }
+#poss.S28 { transform: scale3d(1.120, 1.120, 1); }
+#poss.S29 { transform: scale3d(1.135, 1.135, 1); }
+#poss.S30 { transform: scale3d(1.150, 1.150, 1); }
+#poss.S31 { transform: scale3d(1.165, 1.165, 1); }
+#poss.S32 { transform: scale3d(1.180, 1.180, 1); }
+#poss.S33 { transform: scale3d(1.195, 1.195, 1); }
+#poss.S34 { transform: scale3d(1.210, 1.210, 1); }
+#poss.S35 { transform: scale3d(1.225, 1.225, 1); }
+#poss.S36 { transform: scale3d(1.240, 1.240, 1); }
+#poss.S37 { transform: scale3d(1.255, 1.255, 1); }
+#poss.S38 { transform: scale3d(1.270, 1.270, 1); }
+#poss.S39 { transform: scale3d(1.285, 1.285, 1); }
+#poss.S40 { transform: scale3d(1.300, 1.300, 1); }
+
+/* ---- header ---- */
+.Header {
+    width: 100%;
+    flow-children: right;
+    margin: 0px 6px 14px 8px;
+}
+
+.Heading {
+    width: fill-parent-flow(1);
+    flow-children: down;
+}
+
+.Brand {
+    font-size: 13px;
+    letter-spacing: 3px;
+    font-weight: bold;
+    color: #e4ae39;
+}
+
+.Title {
+    font-size: 27px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.Tool {
+    width: 34px;
+    height: 34px;
+    margin-left: 6px;
+    vertical-align: top;
+    border-radius: 10px;
+    background-color: #ffffff14;
+
+    transition-property: background-color, transform;
+    transition-duration: .2s;
+    transition-timing-function: cubic-bezier(.2, 1.6, .4, 1);
+
+    & Label {
+        horizontal-align: center;
+        vertical-align: center;
+        font-size: 18px;
+        color: #ffffffc0;
+    }
+
+    &:hover {
+        background-color: #e4ae39;
+        transform: scale3d(1.1, 1.1, 1);
+        & Label { color: #11141a; }
+    }
+}
+
+/* ---- rows ---- */
+.Item {
+    width: 100%;
+    height: 48px;
+    margin-top: 6px;
+    padding: 0px 14px;
+    flow-children: right;
+    border-radius: 14px;
+    background-color: #ffffff0d;
+
+    transition-property: background-color, transform, opacity;
+    transition-duration: .1s, .3s, .3s;
+    transition-timing-function: ease-out, cubic-bezier(.2, 1.6, .4, 1), ease-out;
+    transform: translateX(0px);
+
+    &:hover {
+        background-color: #e4ae3938;
+        transform: translateX(12px);
+    }
+
+    &:active {
+        background-color: #e4ae3960;
+        transform: translateX(6px) scale3d(.98, .98, 1);
+        transition-duration: .05s;
+    }
+
+    &.Empty {
+        visibility: collapse;
+    }
+}
+
+/* key hint: the digit that picks this row */
+.Key {
+    width: 28px;
+    height: 28px;
+    vertical-align: center;
+    margin-right: 14px;
+    border-radius: 9px;
+    background-color: #ffffff1a;
+
+    transition-property: background-color, transform;
+    transition-duration: .3s;
+    transition-timing-function: cubic-bezier(.2, 1.8, .4, 1);
+
+    & Label {
+        horizontal-align: center;
+        vertical-align: center;
+        font-size: 15px;
+        font-weight: bold;
+        color: #ffffffc0;
+    }
+}
+
+.Item:hover .Key {
+    background-color: #e4ae39;
+    transform: scale3d(1.15, 1.15, 1);
+    & Label { color: #11141a; }
+}
+
+.ItemText {
+    width: fill-parent-flow(1);
+    vertical-align: center;
+    font-size: 19px;
+    color: #e8e8ec;
+}
+
+.Item:hover .ItemText {
+    color: #ffffff;
+}
+
+/* rows arrive one after another with a little bounce when the menu opens */
+#menu.Hidden .Item {
+    opacity: 0;
+    transform: translateX(-30px);
+}
+#b2 { transition-delay: 0s, .035s, .035s; }
+#b3 { transition-delay: 0s, .07s, .07s; }
+#b4 { transition-delay: 0s, .105s, .105s; }
+#b5 { transition-delay: 0s, .14s, .14s; }
+#b6 { transition-delay: 0s, .175s, .175s; }
+#b7 { transition-delay: 0s, .21s, .21s; }
+#b8 { transition-delay: 0s, .245s, .245s; }
+#b9 { transition-delay: 0s, .28s, .28s; }
+
+/* stop / delete */
+.Accent .ItemText { color: #ff8170; }
+.Accent:hover { background-color: #ff6a5538; }
+.Accent:hover .Key { background-color: #ff6a55; }
+
+.Close {
+    height: 40px;
+    margin-top: 12px;
+    background-color: none;
+
+    & .ItemText {
+        font-size: 16px;
+        color: #ffffff80;
+    }
+}
+
+/* ---- settings screen ---- */
+.SettingsPanel { width: 100%; flow-children: down; visibility: collapse; }
+#menu.Settings .Rows { visibility: collapse; }
+#menu.Settings .SettingsPanel { visibility: visible; }
+.Rows { width: 100%; flow-children: down; }
+
+.Slider {
+    width: 100%;
+    flow-children: down;
+    margin: 6px 6px 14px 6px;
+}
+
+.SliderHead {
+    width: 100%;
+    flow-children: right;
+    margin-bottom: 8px;
+}
+
+.SliderName {
+    width: fill-parent-flow(1);
+    font-size: 17px;
+    color: #e8e8ec;
+}
+
+.SliderValue {
+    font-size: 17px;
+    font-weight: bold;
+    color: #e4ae39;
+}
+
+.Track {
+    width: 328px;
+    height: 24px;
+}
+
+/* the visible slider: bar, gold fill up to the value, round knob; all behind the hit buttons */
+.Bar, .Fill {
+    height: 8px;
+    vertical-align: center;
+    border-radius: 4px;
+}
+.Bar { width: 100%; background-color: #ffffff1f; }
+.Fill {
+    background-color: #e4ae39;
+    transition-property: width;
+    transition-duration: .3s;
+    transition-timing-function: cubic-bezier(.2, 1.4, .35, 1);
+}
+.Knob {
+    width: 20px;
+    height: 20px;
+    margin-left: -6px;
+    vertical-align: center;
+    border-radius: 10px;
+    background-color: #ffffff;
+    box-shadow: #00000080 0px 2px 6px 0px;
+    transition-property: transform;
+    transition-duration: .3s;
+    transition-timing-function: cubic-bezier(.2, 1.6, .35, 1);
+}
+.Slider:hover .Knob { background-color: #ffd98a; }
+
+/* 41 invisible click targets laid over the track: the HUD reports clicks only, no drag */
+.Hits {
+    width: 100%;
+    height: 100%;
+    flow-children: right;
+}
+.Hit {
+    width: 8px;
+    height: 100%;
+    background-color: none;
+    &:hover { background-color: #ffffff22; }
+}
+
+/* slider value classes V0..V40 on #slx / #sly / #sls */
+.V0 .Fill { width: 0px; }
+.V0 .Knob { transform: translateX(0px); }
+.V1 .Fill { width: 8px; }
+.V1 .Knob { transform: translateX(8px); }
+.V2 .Fill { width: 16px; }
+.V2 .Knob { transform: translateX(16px); }
+.V3 .Fill { width: 24px; }
+.V3 .Knob { transform: translateX(24px); }
+.V4 .Fill { width: 32px; }
+.V4 .Knob { transform: translateX(32px); }
+.V5 .Fill { width: 40px; }
+.V5 .Knob { transform: translateX(40px); }
+.V6 .Fill { width: 48px; }
+.V6 .Knob { transform: translateX(48px); }
+.V7 .Fill { width: 56px; }
+.V7 .Knob { transform: translateX(56px); }
+.V8 .Fill { width: 64px; }
+.V8 .Knob { transform: translateX(64px); }
+.V9 .Fill { width: 72px; }
+.V9 .Knob { transform: translateX(72px); }
+.V10 .Fill { width: 80px; }
+.V10 .Knob { transform: translateX(80px); }
+.V11 .Fill { width: 88px; }
+.V11 .Knob { transform: translateX(88px); }
+.V12 .Fill { width: 96px; }
+.V12 .Knob { transform: translateX(96px); }
+.V13 .Fill { width: 104px; }
+.V13 .Knob { transform: translateX(104px); }
+.V14 .Fill { width: 112px; }
+.V14 .Knob { transform: translateX(112px); }
+.V15 .Fill { width: 120px; }
+.V15 .Knob { transform: translateX(120px); }
+.V16 .Fill { width: 128px; }
+.V16 .Knob { transform: translateX(128px); }
+.V17 .Fill { width: 136px; }
+.V17 .Knob { transform: translateX(136px); }
+.V18 .Fill { width: 144px; }
+.V18 .Knob { transform: translateX(144px); }
+.V19 .Fill { width: 152px; }
+.V19 .Knob { transform: translateX(152px); }
+.V20 .Fill { width: 160px; }
+.V20 .Knob { transform: translateX(160px); }
+.V21 .Fill { width: 168px; }
+.V21 .Knob { transform: translateX(168px); }
+.V22 .Fill { width: 176px; }
+.V22 .Knob { transform: translateX(176px); }
+.V23 .Fill { width: 184px; }
+.V23 .Knob { transform: translateX(184px); }
+.V24 .Fill { width: 192px; }
+.V24 .Knob { transform: translateX(192px); }
+.V25 .Fill { width: 200px; }
+.V25 .Knob { transform: translateX(200px); }
+.V26 .Fill { width: 208px; }
+.V26 .Knob { transform: translateX(208px); }
+.V27 .Fill { width: 216px; }
+.V27 .Knob { transform: translateX(216px); }
+.V28 .Fill { width: 224px; }
+.V28 .Knob { transform: translateX(224px); }
+.V29 .Fill { width: 232px; }
+.V29 .Knob { transform: translateX(232px); }
+.V30 .Fill { width: 240px; }
+.V30 .Knob { transform: translateX(240px); }
+.V31 .Fill { width: 248px; }
+.V31 .Knob { transform: translateX(248px); }
+.V32 .Fill { width: 256px; }
+.V32 .Knob { transform: translateX(256px); }
+.V33 .Fill { width: 264px; }
+.V33 .Knob { transform: translateX(264px); }
+.V34 .Fill { width: 272px; }
+.V34 .Knob { transform: translateX(272px); }
+.V35 .Fill { width: 280px; }
+.V35 .Knob { transform: translateX(280px); }
+.V36 .Fill { width: 288px; }
+.V36 .Knob { transform: translateX(288px); }
+.V37 .Fill { width: 296px; }
+.V37 .Knob { transform: translateX(296px); }
+.V38 .Fill { width: 304px; }
+.V38 .Knob { transform: translateX(304px); }
+.V39 .Fill { width: 312px; }
+.V39 .Knob { transform: translateX(312px); }
+.V40 .Fill { width: 320px; }
+.V40 .Knob { transform: translateX(320px); }
