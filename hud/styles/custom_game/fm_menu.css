@@ -326,10 +326,12 @@
 }
 
 /* ---- settings screen ---- */
-.SettingsPanel { width: 100%; flow-children: down; visibility: collapse; }
-#menu.Settings .Rows { visibility: collapse; }
-#menu.Settings .SettingsPanel { visibility: visible; }
+.SettingsPanel { width: 100%; flow-children: down; }
 .Rows { width: 100%; flow-children: down; }
+/* the screen not shown is folded to 0 px, clipped (no clicks either) and transparent, not collapsed:
+   a collapsed panel ignored the SwapA / SwapB switch, so its rows came back without the entrance */
+.SettingsPanel, #menu.Settings .Rows { height: 0px; overflow: clip; opacity: 0; }
+#menu.Settings .SettingsPanel { height: fit-children; overflow: noclip; opacity: 1; }
 
 .Slider {
     width: 100%;

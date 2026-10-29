@@ -490,6 +490,14 @@ public partial class FakeMimic : BasePlugin
         cmd.ReplyToCommand($"[FM] {cmd.ArgByIndex(1)}.{cmd.ArgByIndex(2)} = {cmd.ArgByIndex(3) != "0"}");
     }
 
+    [ConsoleCommand("fm_click", "fm_click <button id> - click a menu button, e.g. bg (gear), sb, sx12 (debug)")]
+    public void CmdClick(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        var p = caller ?? LocalHuman();
+        if (p == null || _hud is not { IsValid: true }) { cmd.ReplyToCommand("[FM] no player or HUD"); return; }
+        OnHudClicked(p, _hud, cmd.ArgByIndex(1));
+    }
+
     [ConsoleCommand("fm_hudinfo", "fm_hudinfo - state of the menu HUD entity (debug)")]
     public void CmdHudInfo(CCSPlayerController? caller, CommandInfo cmd)
     {
