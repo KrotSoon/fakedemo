@@ -517,8 +517,10 @@ function Netcon-Read($stream, [int]$quietMs, [int]$maxMs) {
   $out.ToString()
 }
 
-# host_workshop_map only works once Steam has mounted the workshop content, which is after the
-# command line ran: wait for the main menu (the console goes quiet), then type it in
+# host_workshop_map only works once the game runs its console and Steam has mounted the workshop
+# content, both after the command line ran. netcon accepts long before that and stays silent, so
+# readiness is an echo coming back; then the menu load settles and the map is typed in.
+# Everything the console says goes to Documents\FakeDemo\netcon.log.
 function Load-WorkshopMap($s) {
   $nc = Netcon-Of $s
   $client = $null
@@ -528,15 +530,33 @@ function Load-WorkshopMap($s) {
     try { $c.Connect("127.0.0.1", $nc.Port); $client = $c } catch { $c.Dispose(); Start-Sleep -Milliseconds 500 }
   }
   if (-not $client) { Log "WARNING game console not reachable: load the map in game with ws"; return }
+  $netLog = Join-Path $Data "netcon.log"
+  Set-Content $netLog "" -Encoding UTF8
+  function Heard([string]$text) { if ($text) { Add-Content $netLog $text -Encoding UTF8 -NoNewline } ; $text }
   try {
     $st = $client.GetStream()
     if ($nc.Pass) { Netcon-Send $st "PASS $($nc.Pass)" }
-    [void](Netcon-Read $st 4000 120000)
-    Log "loading workshop map $($s.MapTitle) ($($s.MapId))"
-    Netcon-Send $st "host_workshop_map $($s.MapId)"
-    $reply = Netcon-Read $st 5000 45000
-    $lines = @($reply -split "`r?`n" | Where-Object { $_ -match 'workshop|map|fail|error|unknown' } | Select-Object -First 6)
-    foreach ($l in $lines) { Log "  game: $($l.Trim())" }
+    # 1. the console executes commands
+    $ready = $false; $tries = 0
+    while (-not $ready -and (Get-Date) -lt $deadline -and (Cs2-Running)) {
+      # the password again now and then, in case the game dropped it while loading
+      if ($nc.Pass -and $tries -and $tries % 5 -eq 0) { Netcon-Send $st "PASS $($nc.Pass)" }
+      $tries++
+      Netcon-Send $st "echo fdready"
+      $ready = (Heard (Netcon-Read $st 2000 2000)) -match 'fdready'
+    }
+    if (-not $ready) { Log "WARNING game console never answered: load the map in game with ws"; return }
+    # 2. the main menu finished loading: console quiet for a while
+    [void](Heard (Netcon-Read $st 4000 60000))
+    # 3. the map; once more if the game said nothing about it
+    for ($try = 1; $try -le 2; $try++) {
+      Log "loading workshop map $($s.MapTitle) ($($s.MapId))$(if ($try -gt 1) { ', again' })"
+      Netcon-Send $st "host_workshop_map $($s.MapId)"
+      $reply = Heard (Netcon-Read $st 5000 30000)
+      $lines = @($reply -split "`r?`n" | Where-Object { $_ -match 'workshop|map|fail|error|unknown|loading|addon' } | Select-Object -First 6)
+      foreach ($l in $lines) { Log "  game: $($l.Trim())" }
+      if ($lines -or -not (Cs2-Running)) { break }
+    }
   } catch { Log "WARNING workshop map not sent: $($_.Exception.Message)" }
   finally { $client.Close() }
 }
