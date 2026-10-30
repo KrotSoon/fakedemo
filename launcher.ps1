@@ -582,7 +582,8 @@ function Fill-Accounts {
   $cur = (Pick-AccountSafe).Id
   foreach ($a in $script:accounts) {
     $c = Add-Chip $p "acc" $a.Name $a.Id ($a.Id -eq $cur)
-    $c.Add_Checked({ param($sender) $script:s.SteamAccount = $sender.Tag; Save })
+    # only a click is a choice: the chip checked while the list fills is the automatic account and stays unsaved
+    $c.Add_Checked({ param($sender) if (-not $script:loading) { $script:s.SteamAccount = $sender.Tag; Save } })
   }
   if (-not $script:accounts) {
     $t = New-Object Windows.Controls.TextBlock

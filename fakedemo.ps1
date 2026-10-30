@@ -51,7 +51,7 @@ function Log([string]$m) {
 function Default-Settings {
   [pscustomobject]@{
     Cs2Path       = ""        # ...\Counter-Strike Global Offensive
-    SteamAccount  = ""        # userdata folder id (account id); empty = most recently used
+    SteamAccount  = ""        # userdata folder id (account id); empty = the one logged in to Steam (Pick-Account)
     Plugins       = $true     # FakeMimic + CS2-Bot-Controller (needs -insecure)
     FakeDirector  = $true     # take log add-on for FakeMimic
     FakeWallhack  = $true     # bots and paths through walls add-on
@@ -123,11 +123,34 @@ function Steam-Accounts {
     }
 }
 
+# Whose binds: the account chosen in the launcher, else the one logged in to Steam now (so on another
+# person's PC, or after switching Steam accounts, it is that person's), else Steam's most recent login,
+# else the CS2 profile written last
 function Pick-Account($s) {
   $all = @(Steam-Accounts)
   if (-not $all) { throw "no CS2 binds found under $(Steam-Path)\userdata: start CS2 once normally" }
   $a = $all | Where-Object Id -eq $s.SteamAccount | Select-Object -First 1
+  if ($a) { return $a }
+  $active = [string](Get-ItemProperty "HKCU:\Software\Valve\Steam\ActiveProcess" -ErrorAction SilentlyContinue).ActiveUser
+  $a = $all | Where-Object { $active -and $active -ne "0" -and $_.Id -eq $active } | Select-Object -First 1
+  if ($a) { return $a }
+  $recent = Steam-RecentLogin
+  $a = $all | Where-Object { $recent -and $_.SteamId64 -eq $recent } | Select-Object -First 1
   if ($a) { $a } else { $all[0] }
+}
+
+# SteamID64 of the latest login in loginusers.vdf (MostRecent where Steam still writes it, else the
+# newest timestamp), or $null
+function Steam-RecentLogin {
+  $login = Join-Path (Steam-Path) "config\loginusers.vdf"
+  if (-not (Test-Path $login)) { return $null }
+  $id = $null; $best = $null; $bestTime = -1
+  foreach ($l in Get-Content $login -Encoding UTF8) {
+    if ($l -match '^\s*"(7656\d{13})"\s*$') { $id = $Matches[1] }
+    elseif ($id -and $l -match '"MostRecent"\s+"1"') { return $id }
+    elseif ($id -and $l -match '"timestamp"\s+"(\d+)"' -and [long]$Matches[1] -gt $bestTime) { $bestTime = [long]$Matches[1]; $best = $id }
+  }
+  $best
 }
 
 function Csgo($s) {
@@ -166,6 +189,30 @@ function Build-Unfake($s, [string]$target) {
   $out += "host_timescale 1", "firstperson; noclip 0; buddha 0; fov_cs_debug 0; r_drawviewmodel 1; cl_drawhud 1",
           "game_type 0", "game_mode 0", "echo normal binds restored"
   Set-Content -Path $target -Value $out -Encoding ASCII
+}
+
+# CS2 saves every bind into the Steam profile by itself, so a session that ends without 'unfake' leaves
+# fd_ / fm_ binds there and those keys do nothing in a normal game. With CS2 closed they go back to the
+# clean copy Build-Unfake keeps (unbound when the key had nothing); the file before is kept in backup\
+function Restore-OwnKeys($s) {
+  if (Cs2-Running) { return }
+  $acc = try { Pick-Account $s } catch { return }
+  if (-not (Select-String -Path $acc.Keys -Pattern '"[+-]?fd_|"fm_' -Quiet)) { return }
+  $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
+  $own = @{}
+  if (Test-Path $snapshot) { foreach ($l in Get-Content $snapshot) { if ($l -match '^\s*"([^"]+)"\s+"([^"]*)"\s*$') { $own[$Matches[1].ToUpper()] = $Matches[2] } } }
+  Copy-Item $acc.Keys (Join-Path $Data "backup\keys_$($acc.Id)_with_fake_binds.vcfg") -Force
+  $n = 0
+  $out = foreach ($l in [IO.File]::ReadAllLines($acc.Keys)) {
+    $m = [regex]::Match($l, '^(\s*)"([^"]+)"(\s+)"([^"]*)"\s*$')
+    if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, '(^|[^a-z])[+-]?(fd_|fm_)')) {
+      $k = $m.Groups[2].Value; $n++
+      $v = if ($own[$k.ToUpper()]) { $own[$k.ToUpper()] } else { "<unbound>" }
+      "$($m.Groups[1].Value)`"$k`"$($m.Groups[3].Value)`"$v`""
+    } else { $l }
+  }
+  [IO.File]::WriteAllLines($acc.Keys, $out, (New-Object Text.UTF8Encoding $false))
+  Log "your Steam binds had $n fake binds left: put back to your own"
 }
 
 function Install-Cfg($s) {
@@ -580,6 +627,7 @@ function Wait-Cs2Start {
 
 function Play($s) {
   Need-Closed
+  Restore-OwnKeys $s   # before Build-Unfake reads them: a clean profile refreshes the clean copy
   Install-Cfg $s
   if ($s.Plugins) { Plugins-On $s } elseif ((Load-Manifest).Count) { Plugins-Off $s }
   $a = Launch-Args $s
@@ -598,6 +646,7 @@ function Play($s) {
     Start-Sleep -Seconds 3   # let cs2 release its files
   } finally {
     Plugins-Off $s
+    Restore-OwnKeys $s
   }
 }
 
