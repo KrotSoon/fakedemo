@@ -71,7 +71,7 @@ function Load-Settings {
     $saved = Get-Content $SettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach ($p in $saved.PSObject.Properties) { if ($s.PSObject.Properties[$p.Name]) { $s.($p.Name) = $p.Value } }
   }
-  if (-not $s.Cs2Path -or -not (Test-Path (Join-Path $s.Cs2Path "game\csgo\gameinfo.gi"))) { $s.Cs2Path = Find-Cs2 }
+  if (-not $s.Cs2Path -or -not (Test-Path ([IO.Path]::Combine($s.Cs2Path, "game\csgo\gameinfo.gi")))) { $s.Cs2Path = Find-Cs2 }
   $s
 }
 
@@ -96,9 +96,11 @@ function Find-Cs2 {
   if (Test-Path $vdf) {
     $libs += Select-String -Path $vdf -Pattern '"path"\s+"([^"]+)"' | ForEach-Object { $_.Matches[0].Groups[1].Value -replace '\\\\', '\' }
   }
+  # [IO.Path]::Combine, not Join-Path: a library on a drive that is not there (unplugged disk, old entry)
+  # made Join-Path throw "drive D does not exist" and the launcher stopped on its first start
   foreach ($l in $libs) {
-    $c = Join-Path $l "steamapps\common\Counter-Strike Global Offensive"
-    if (Test-Path (Join-Path $c "game\csgo\gameinfo.gi")) { return $c }
+    $c = [IO.Path]::Combine($l, "steamapps\common\Counter-Strike Global Offensive")
+    if (Test-Path ([IO.Path]::Combine($c, "game\csgo\gameinfo.gi"))) { return $c }
   }
   ""
 }
