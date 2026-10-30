@@ -355,13 +355,25 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
                 <TextBlock x:Name="PluginsHint" Style="{StaticResource Hint}"/>
               </StackPanel>
             </DockPanel>
-            <DockPanel Margin="0,12,0,0">
-              <CheckBox x:Name="SwDirector" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
-              <StackPanel>
-                <TextBlock Style="{StaticResource Label}" Text="Журнал дублей"/>
-                <TextBlock Style="{StaticResource Hint}" Text="FakeDirector: список дублей в меню H"/>
-              </StackPanel>
-            </DockPanel>
+            <!-- modules: add-ons of FakeMimic, each with its own screen in menu H; off with the plugins -->
+            <StackPanel x:Name="Modules" Margin="0,12,0,0">
+              <Border Height="1" Background="#1CFFFFFF" Margin="0,0,0,10"/>
+              <TextBlock Style="{StaticResource Hint}" Text="МОДУЛИ" FontSize="10" Margin="0,0,0,8"/>
+              <DockPanel>
+                <CheckBox x:Name="SwDirector" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Label}" Text="Журнал дублей"/>
+                  <TextBlock Style="{StaticResource Hint}" Text="Takes в меню H: оценки, превью, просмотр"/>
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,12,0,0">
+                <CheckBox x:Name="SwWallhack" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Label}" Text="Wallhack"/>
+                  <TextBlock Style="{StaticResource Hint}" Text="боты и их пути сквозь стены, клавиша J"/>
+                </StackPanel>
+              </DockPanel>
+            </StackPanel>
           </StackPanel>
         </Border>
 
@@ -376,6 +388,16 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
             <StackPanel VerticalAlignment="Center">
               <TextBlock x:Name="MapTitle" Style="{StaticResource Label}" TextTrimming="CharacterEllipsis"/>
               <TextBlock x:Name="MapHint" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <Border x:Name="TakesCard" Style="{StaticResource ClickCard}" Padding="12,10" ToolTip="Все дубли: смотреть, оценивать, удалять">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Style="{StaticResource Label}" Text="Дубли"/>
+              <TextBlock x:Name="TakesHint" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
             </StackPanel>
           </DockPanel>
         </Border>
@@ -419,6 +441,34 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         <DockPanel Margin="-6,8,-6,0">
           <Button x:Name="BtnWorkshop" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Открыть мастерскую"/>
           <Button x:Name="BtnPickBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
+        </DockPanel>
+      </StackPanel>
+
+      <!-- ===== takes: every take of every map and folder ===== -->
+      <StackPanel x:Name="Takes" Visibility="Collapsed">
+        <StackPanel Orientation="Horizontal" Margin="0,-6,0,6">
+          <RadioButton x:Name="TkNew" Style="{StaticResource Chip}" GroupName="tsort" Content="Новые"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+          <RadioButton x:Name="TkStars" Style="{StaticResource Chip}" GroupName="tsort" Content="&#x2605; Лучшие"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+          <RadioButton x:Name="TkAll" Style="{StaticResource Chip}" GroupName="tflt" Content="Все"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+          <RadioButton x:Name="TkTop" Style="{StaticResource Chip}" GroupName="tflt" Content="&#x2605;4+"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+          <RadioButton x:Name="TkNone" Style="{StaticResource Chip}" GroupName="tflt" Content="Без оценки"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+          <RadioButton x:Name="TkGone" Style="{StaticResource Chip}" GroupName="tflt" Content="Без файла"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+        </StackPanel>
+        <Grid>
+          <TextBox x:Name="TkSearch" Style="{StaticResource Field}"/>
+          <TextBlock x:Name="TkSearchHint" Text="&#x2315;  Дубль, карта, папка, бот, заметка" IsHitTestVisible="False" Foreground="#60FFFFFF"
+                     FontSize="14" Margin="12,0,0,0" VerticalAlignment="Center"/>
+        </Grid>
+        <ScrollViewer x:Name="TkScroll" Margin="0,10,-8,0" Height="430" VerticalScrollBarVisibility="Auto" Focusable="False">
+          <StackPanel x:Name="TkList" Margin="0,0,8,0"/>
+        </ScrollViewer>
+        <TextBlock x:Name="TkEmpty" Style="{StaticResource Hint}" Margin="2,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+        <TextBlock x:Name="TkMsg" Style="{StaticResource Hint}" Margin="2,6,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+        <DockPanel Margin="-6,8,-6,0">
+          <TextBlock x:Name="TkTotal" DockPanel.Dock="Right" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+          <Button x:Name="BtnTkBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
         </DockPanel>
       </StackPanel>
 
@@ -548,6 +598,7 @@ function Load-Controls {
   $s = $script:s
   (El "SwPlugins").IsChecked = [bool]$s.Plugins
   (El "SwDirector").IsChecked = [bool]$s.FakeDirector
+  (El "SwWallhack").IsChecked = [bool]$s.FakeWallhack
   (El "SwExecFd").IsChecked = [bool]$s.ExecFd
   (El "TbCs2").Text = $s.Cs2Path
   (El "TbOptions").Text = $s.LaunchOptions
@@ -562,19 +613,23 @@ function Load-Controls {
 function Update-Summary {
   $s = $script:s
   (El "SwDirector").IsEnabled = [bool]$s.Plugins
+  (El "SwWallhack").IsEnabled = [bool]$s.Plugins
+  (El "Modules").Opacity = $(if ($s.Plugins) { 1 } else { 0.45 })
   (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
   $where = if ($s.MapId) { $s.MapTitle } else { "главное меню" }
   (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
   Update-MapCard
 }
 
-$Screens = [ordered]@{ "main" = @("Main", "Fake demo"); "settings" = @("Settings", "Настройки"); "picker" = @("Picker", "Карта") }
+$Screens = [ordered]@{ "main" = @("Main", "Fake demo"); "settings" = @("Settings", "Настройки"); "picker" = @("Picker", "Карта"); "takes" = @("Takes", "Дубли") }
 
 function Show-Screen([string]$name) {
   foreach ($k in $Screens.Keys) { (El $Screens[$k][0]).Visibility = $(if ($k -eq $name) { "Visible" } else { "Collapsed" }) }
   (El "Title").Text = $Screens[$name][1]
   Animate-In (El $Screens[$name][0])
   if ($name -eq "picker") { Animate-In (Pick-List) 25 8 }
+  if ($name -eq "takes") { Animate-In (El "TkList") 25 8 }
+  if ($name -eq "main") { Update-TakesCard }
 }
 
 function Screen { foreach ($k in $Screens.Keys) { if ((El $Screens[$k][0]).Visibility -eq "Visible") { return $k } } }
@@ -722,12 +777,227 @@ function Start-Previews {
   if ($missing) { $script:prevProc = Run-Hidden "previews"; $script:prevTimer.Start() }
 }
 
+# ---------------- takes ----------------
+# The take logs FakeDirector writes (Documents\FakeDemo\takes\<map>\<folder>\takes.json), all of them,
+# with the demos in game\csgo. Stars and notes are written back to the same files.
+
+Add-Type -AssemblyName Microsoft.VisualBasic   # deleting to the Recycle Bin
+
+function Load-Takes {
+  $root = Join-Path $Data "takes"
+  if (-not (Test-Path $root)) { return @() }
+  $csgo = try { Csgo $script:s } catch { $null }
+  foreach ($j in Get-ChildItem $root -Recurse -Filter takes.json) {
+    # PowerShell 5.1 hands a JSON array over as one object: ForEach-Object unrolls it
+    $recs = @(try { Get-Content $j.FullName -Raw -Encoding UTF8 | ConvertFrom-Json | ForEach-Object { $_ } } catch { })
+    foreach ($r in $recs) {
+      if ($null -eq $r -or -not $r.Demo) { continue }
+      foreach ($p in @{ Stars = 0; Note = "" }.GetEnumerator()) {
+        if ($r.PSObject.Properties.Name -notcontains $p.Key) { $r | Add-Member $p.Key $p.Value }
+      }
+      # the first logs had a verdict instead of stars (FakeDirector turns them the same way)
+      if (-not $r.Stars) { $r.Stars = if ($r.Best) { 5 } else { switch ($r.Verdict) { "good" { 4 } "ok" { 3 } "bad" { 1 } default { 0 } } } }
+      $file = if ($csgo) { Join-Path $csgo "$($r.Demo).dem" } else { "" }
+      $exists = $file -and (Test-Path $file)
+      [pscustomobject]@{
+        Rec = $r; Map = $j.Directory.Parent.Name; Folder = $j.Directory.Name; Json = $j.FullName
+        File = $file; Exists = $exists; Size = $(if ($exists) { (Get-Item $file).Length } else { 0 })
+        When = $(try { [datetime]$r.Started } catch { Get-Date 0 })
+      }
+    }
+  }
+}
+
+function Save-TakeLog([string]$json) {
+  $recs = @($script:takes | Where-Object Json -eq $json | ForEach-Object Rec)
+  foreach ($r in $recs) { foreach ($old in "Best", "Verdict") { $r.PSObject.Properties.Remove($old) } }
+  $text = if ($recs.Count) { ConvertTo-Json -InputObject $recs -Depth 6 } else { "[]" }
+  [IO.File]::WriteAllText($json, $text, (New-Object Text.UTF8Encoding $false))
+}
+
+function Size-Text([long]$b) { if ($b -lt 1MB) { "{0:0} КБ" -f ($b / 1KB) } elseif ($b -lt 1GB) { "{0:0.#} МБ" -f ($b / 1MB) } else { "{0:0.##} ГБ" -f ($b / 1GB) } }
+
+function Takes-Word([int]$n) {
+  $m = $n % 100; $k = $n % 10
+  if ($m -ge 11 -and $m -le 14) { "дублей" } elseif ($k -eq 1) { "дубль" } elseif ($k -ge 2 -and $k -le 4) { "дубля" } else { "дублей" }
+}
+
+function Update-TakesCard {
+  $t = @(try { Load-Takes } catch { })
+  $best = $t | Sort-Object { $_.Rec.Stars }, When -Descending | Select-Object -First 1
+  (El "TakesHint").Text = if (-not $t) { "пока нет: H › Start take в игре" }
+    else { "$($t.Count) $(Takes-Word $t.Count) · $(Size-Text (($t | Measure-Object Size -Sum).Sum))$(if ($best.Rec.Stars) { " · лучший $('★' * $best.Rec.Stars) $($best.Rec.Demo)" })" }
+}
+
+function Open-Takes {
+  $script:takes = @(Load-Takes)
+  $script:loading = $true
+  if (-not (El "TkStars").IsChecked) { (El "TkNew").IsChecked = $true }
+  if (-not ((El "TkTop").IsChecked -or (El "TkNone").IsChecked -or (El "TkGone").IsChecked)) { (El "TkAll").IsChecked = $true }
+  $script:loading = $false
+  (El "TkSearch").Text = ""
+  Fill-Takes
+  Show-Screen "takes"
+}
+
+function Fill-Takes {
+  $q = (El "TkSearch").Text.Trim().ToLower()
+  (El "TkSearchHint").Visibility = $(if ($q) { "Collapsed" } else { "Visible" })
+  $list = @($script:takes | Where-Object {
+    $r = $_.Rec
+    $ok = if ((El "TkTop").IsChecked) { $r.Stars -ge 4 } elseif ((El "TkNone").IsChecked) { -not $r.Stars } elseif ((El "TkGone").IsChecked) { -not $_.Exists } else { $true }
+    $ok -and (-not $q -or ("$($r.Demo) $($_.Map) $($_.Folder) $($r.Note) $(($r.Bots | ForEach-Object { "$($_.Recording) $($_.BotName)" }) -join ' ')".ToLower().Contains($q)))
+  })
+  $list = if ((El "TkStars").IsChecked) { $list | Sort-Object @{ e = { $_.Rec.Stars }; Descending = $true }, @{ e = { $_.When }; Descending = $true } }
+          else { $list | Sort-Object When -Descending }
+  $panel = El "TkList"; $panel.Children.Clear()
+  foreach ($t in $list) { [void]$panel.Children.Add((New-TakeItem $t)) }
+  (El "TkScroll").ScrollToTop()
+  $e = El "TkEmpty"
+  $e.Text = if (-not $script:takes) { "Дублей пока нет. В игре: H › Start take, потом Stop take или DEL — дубль появится здесь." }
+            elseif (-not $list) { "Ничего не найдено" } else { "" }
+  $e.Visibility = $(if ($e.Text) { "Visible" } else { "Collapsed" })
+  $all = @($script:takes)
+  (El "TkTotal").Text = if ($all) { "$($all.Count) $(Takes-Word $all.Count) · $(Size-Text (($all | Measure-Object Size -Sum).Sum)) на диске" } else { "" }
+}
+
+function Tool-Button([string]$glyph, [string]$tip) {
+  $b = New-Object Windows.Controls.Button
+  $b.Style = $win.Resources["Tool"]; $b.Content = $glyph; $b.ToolTip = $tip
+  $b.FontFamily = "Segoe MDL2 Assets"; $b.FontSize = 14; $b.Margin = "6,0,0,0"; $b.VerticalAlignment = "Top"
+  $b
+}
+
+function Text-Line([string]$text, [string]$color, [double]$size) {
+  $t = New-Object Windows.Controls.TextBlock
+  $t.Text = $text; $t.Foreground = $color; $t.FontSize = $size; $t.TextTrimming = "CharacterEllipsis"; $t.Margin = "0,2,0,0"
+  $t
+}
+
+# one take: stars and name, where and when, who played, a note; Watch / folder / delete on the right
+function New-TakeItem($t) {
+  $r = $t.Rec
+  $card = New-Object Windows.Controls.Border
+  $card.CornerRadius = 12; $card.Background = "#0DFFFFFF"; $card.Padding = "12,10"; $card.Margin = "0,0,0,8"
+  $card.RenderTransform = New-Object Windows.Media.TranslateTransform
+  if (-not $t.Exists) { $card.Opacity = 0.55 }
+  $dock = New-Object Windows.Controls.DockPanel
+
+  $tools = New-Object Windows.Controls.StackPanel; $tools.Orientation = "Horizontal"
+  [Windows.Controls.DockPanel]::SetDock($tools, "Right")
+  # handlers get the take from Tag: a GetNewClosure block would not see this script's functions
+  $watch = Tool-Button ([string][char]0xE768) "Смотреть"; $watch.IsEnabled = $t.Exists
+  $show = Tool-Button ([string][char]0xE838) "Показать в папке"; $show.IsEnabled = $t.Exists
+  $del = Tool-Button ([string][char]0xE74D) "Удалить дубль (в корзину)"
+  foreach ($b in $watch, $show, $del) { $b.Tag = $t; [void]$tools.Children.Add($b) }
+  $watch.Add_Click({ param($sender) try { Watch-Take $sender.Tag } catch { Show-Error $_.Exception.Message } })
+  $show.Add_Click({ param($sender) Start-Process explorer.exe "/select,`"$($sender.Tag.File)`"" })
+  $del.Add_Click({ param($sender) try { Delete-Take $sender.Tag } catch { Show-Error $_.Exception.Message } })
+  [void]$dock.Children.Add($tools)
+
+  $info = New-Object Windows.Controls.StackPanel
+  $head = New-Object Windows.Controls.StackPanel; $head.Orientation = "Horizontal"
+  # five stars: a click sets the rating, the lit last one again clears it
+  for ($i = 1; $i -le 5; $i++) {
+    $st = New-Object Windows.Controls.TextBlock
+    $st.Text = [string][char]0x2605; $st.FontSize = 17; $st.Cursor = "Hand"; $st.Margin = "0,0,1,0"; $st.Tag = @{ N = $i; Take = $t }
+    $st.Foreground = $(if ($i -le $r.Stars) { "#E4AE39" } else { "#30FFFFFF" })
+    $st.Add_MouseLeftButtonDown({ param($sender, $e)
+      $e.Handled = $true
+      $tk = $sender.Tag.Take; $n = $sender.Tag.N
+      $tk.Rec.Stars = if ($tk.Rec.Stars -eq $n) { 0 } else { $n }
+      Save-TakeLog $tk.Json
+      foreach ($s2 in $sender.Parent.Children) { if ($s2.Tag -is [hashtable]) { $s2.Foreground = $(if ($s2.Tag.N -le $tk.Rec.Stars) { "#E4AE39" } else { "#30FFFFFF" }) } }
+    })
+    [void]$head.Children.Add($st)
+  }
+  $name = New-Object Windows.Controls.TextBlock
+  $name.Text = $r.Demo; $name.Foreground = "White"; $name.FontSize = 14; $name.FontWeight = "SemiBold"; $name.Margin = "8,1,0,0"
+  $name.TextTrimming = "CharacterEllipsis"
+  [void]$head.Children.Add($name)
+  [void]$info.Children.Add($head)
+
+  [void]$info.Children.Add((Text-Line "$($t.Map) / $($t.Folder) · $($t.When.ToString('dd.MM HH:mm'))" "#90FFFFFF" 12))
+  $len = "$('{0:0.0}' -f [double]$r.Seconds) с · $(if ($t.Exists) { Size-Text $t.Size } else { 'файла демки нет' })"
+  [void]$info.Children.Add((Text-Line $len $(if ($t.Exists) { "#90FFFFFF" } else { "#FF8170" }) 12))
+  $bots = @($r.Bots | ForEach-Object { "$($_.Recording) → $($_.BotName) ($(if ($_.Team -eq 3) { 'CT' } else { 'T' }))" }) -join "  ·  "
+  if ($bots) { [void]$info.Children.Add((Text-Line $bots "#70FFFFFF" 12)) }
+
+  # the note: click to write, Enter or leaving the field saves
+  $note = Text-Line $(if ($r.Note) { "«$($r.Note)»" } else { "+ заметка" }) $(if ($r.Note) { "#C8E8E8EC" } else { "#50FFFFFF" }) 12
+  $note.FontStyle = $(if ($r.Note) { "Italic" } else { "Normal" }); $note.Cursor = "IBeam"; $note.Margin = "0,4,0,0"
+  $edit = New-Object Windows.Controls.TextBox
+  $edit.Style = $win.Resources["Field"]; $edit.Visibility = "Collapsed"; $edit.Margin = "0,4,0,0"; $edit.FontSize = 12
+  $note.Tag = @{ Take = $t; Edit = $edit }; $edit.Tag = @{ Take = $t; Note = $note }
+  $note.Add_MouseLeftButtonDown({ param($sender, $e)
+    $e.Handled = $true
+    $ed = $sender.Tag.Edit
+    $ed.Text = $sender.Tag.Take.Rec.Note; $sender.Visibility = "Collapsed"; $ed.Visibility = "Visible"; $ed.Focus() | Out-Null; $ed.SelectAll()
+  })
+  $edit.Add_LostFocus({ param($sender)
+    $tk = $sender.Tag.Take; $nt = $sender.Tag.Note
+    $tk.Rec.Note = $sender.Text.Trim(); Save-TakeLog $tk.Json
+    $nt.Text = if ($tk.Rec.Note) { "«$($tk.Rec.Note)»" } else { "+ заметка" }
+    $nt.Foreground = $(if ($tk.Rec.Note) { "#C8E8E8EC" } else { "#50FFFFFF" }); $nt.FontStyle = $(if ($tk.Rec.Note) { "Italic" } else { "Normal" })
+    $sender.Visibility = "Collapsed"; $nt.Visibility = "Visible"
+  })
+  [void]$info.Children.Add($note); [void]$info.Children.Add($edit)
+
+  [void]$dock.Children.Add($info)
+  $card.Child = $dock
+  $card
+}
+
+# the console port and password of the CS2 that runs now (from its command line), or $null
+function Game-Netcon {
+  $cl = (Get-CimInstance Win32_Process -Filter "Name='cs2.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1).CommandLine
+  if ($cl -notmatch '-netconport\s+(\d+)') { return $null }
+  $port = [int]$Matches[1]
+  $pass = if ($cl -match '-netconpassword\s+(\S+)') { $Matches[1] } else { "" }
+  @{ Port = $port; Pass = $pass }
+}
+
+# CS2 running: the demo is typed into its console. Not running: Steam starts it with the demo, which is a
+# normal start, so only with no plugins left in the game
+function Watch-Take($t) {
+  if (-not (Test-Path $t.File)) { Show-Error "Демки $($t.Rec.Demo).dem уже нет в папке игры"; return }
+  $demo = $t.Rec.Demo
+  if (Cs2-Running) {
+    $nc = Game-Netcon
+    if (-not $nc) { Show-Error "CS2 запущена без консоли netcon: открой дубль в игре (H › Takes › Watch) или закрой CS2"; return }
+    $c = New-Object Net.Sockets.TcpClient
+    try {
+      $c.Connect("127.0.0.1", $nc.Port)
+      $st = $c.GetStream()
+      if ($nc.Pass) { Netcon-Send $st "PASS $($nc.Pass)" }
+      Netcon-Send $st "playdemo $demo"
+      Start-Sleep -Milliseconds 300
+    } finally { $c.Close() }
+    Show-Info "Демка $demo запущена в CS2"
+    return
+  }
+  if ((Status $script:s).PluginsOn) { Show-Error "Плагины остались в игре: сначала «Снять плагины», потом смотреть"; return }
+  Start-Process (Join-Path (Steam-Path) "steam.exe") -ArgumentList "-applaunch", "730", "+playdemo", $demo
+  Show-Info "Запускаю CS2 с демкой $demo…"
+}
+
+function Delete-Take($t) {
+  $what = if ($t.Exists) { "Удалить $($t.Rec.Demo).dem ($(Size-Text $t.Size)) в корзину и убрать дубль из списка?" } else { "Убрать $($t.Rec.Demo) из списка? Файла уже нет." }
+  if ([Windows.MessageBox]::Show($win, $what, "Удалить дубль", "YesNo", "Question") -ne "Yes") { return }
+  if ($t.Exists) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($t.File, "OnlyErrorDialogs", "SendToRecycleBin") }
+  $script:takes = @($script:takes | Where-Object { $_ -ne $t })
+  Save-TakeLog $t.Json
+  Fill-Takes
+  Show-Info "$($t.Rec.Demo) удалён$(if ($t.Exists) { ' в корзину' })"
+}
+
 # ---------------- actions ----------------
 
 function Show-Line([string]$m, [string]$color) {
-  $l = El "LogText"
-  $l.Text = $m; $l.Foreground = $color
-  $l.Visibility = $(if ($m) { "Visible" } else { "Collapsed" })
+  foreach ($l in (El "LogText"), (El "TkMsg")) {   # the takes screen has its own line
+    $l.Text = $m; $l.Foreground = $color
+    $l.Visibility = $(if ($m) { "Visible" } else { "Collapsed" })
+  }
 }
 function Show-Error([string]$m) { Show-Line $m "#FF8170" }
 function Show-Info([string]$m) { Show-Line $m "#80FFFFFF" }
@@ -847,6 +1117,12 @@ function Refresh {
 # on mouse down, and marked handled: otherwise the panel starts moving the window and eats the click
 (El "MapCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Picker } catch { Show-Error $_.Exception.Message } })
 (El "BtnBack").Add_Click({ Show-Screen "main" })
+(El "TakesCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Takes } catch { Show-Error $_.Exception.Message } })
+(El "BtnTkBack").Add_Click({ Show-Screen "main" })
+(El "TkSearch").Add_TextChanged({ Fill-Takes })
+foreach ($n in "TkNew", "TkStars", "TkAll", "TkTop", "TkNone", "TkGone") {
+  (El $n).Add_Checked({ if (-not $script:loading) { Fill-Takes; Animate-In (El "TkList") 25 8 } })
+}
 (El "BtnPlay").Add_Click({ try { Start-Play } catch { Show-Error $_.Exception.Message } })
 (El "BtnOff").Add_Click({ try { Plugins-Off $script:s; Show-Info "Плагины сняты, CS2 чиста"; Refresh } catch { Show-Error $_.Exception.Message } })
 (El "BtnFolder").Add_Click({ New-Item -ItemType Directory -Force $Data | Out-Null; Start-Process explorer.exe $Data })
@@ -873,6 +1149,7 @@ function Refresh {
 
 (El "SwPlugins").Add_Click({ $script:s.Plugins = [bool](El "SwPlugins").IsChecked; Save; Update-Summary })
 (El "SwDirector").Add_Click({ $script:s.FakeDirector = [bool](El "SwDirector").IsChecked; Save })
+(El "SwWallhack").Add_Click({ $script:s.FakeWallhack = [bool](El "SwWallhack").IsChecked; Save })
 (El "SwExecFd").Add_Click({ $script:s.ExecFd = [bool](El "SwExecFd").IsChecked; Save; Update-Summary })
 # fields save on every change: going Back or pressing Play while still typing kept no lost focus,
 # and the value was gone
@@ -900,6 +1177,10 @@ $win.Add_PreviewKeyDown({
       $e.Handled = $true; return
     }
     return
+  }
+  if ($e.OriginalSource -eq (El "TkSearch") -and $e.Key -eq "Escape") {
+    if ((El "TkSearch").Text) { (El "TkSearch").Text = "" } else { Show-Screen "main" }
+    $e.Handled = $true; return
   }
   if ($e.OriginalSource -is [Windows.Controls.TextBox]) {
     if ($e.Key -eq "Enter" -or $e.Key -eq "Escape") { [Windows.Input.Keyboard]::ClearFocus(); (El "Panel").Focus() | Out-Null; $e.Handled = $true }
@@ -947,6 +1228,7 @@ Load-Controls
 Refresh
 if (-not $script:s.Cs2Path) { Show-Screen "settings" }
 elseif ($env:FAKEDEMO_SCREEN -eq "picker") { Open-Picker }
+elseif ($env:FAKEDEMO_SCREEN -eq "takes") { Open-Takes }
 elseif ($env:FAKEDEMO_SCREEN) { Show-Screen $env:FAKEDEMO_SCREEN }
 else { Show-Screen "main" }
 

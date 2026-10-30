@@ -54,6 +54,7 @@ function Default-Settings {
     SteamAccount  = ""        # userdata folder id (account id); empty = most recently used
     Plugins       = $true     # FakeMimic + CS2-Bot-Controller (needs -insecure)
     FakeDirector  = $true     # take log add-on for FakeMimic
+    FakeWallhack  = $true     # bots and paths through walls add-on
     ExecFd        = $true     # +exec fd on start (the game stays in the main menu)
     MapKind       = ""        # map to load right away: "" = main menu, "official", "workshop"
     MapId         = ""        # official: map name; workshop: item id
@@ -399,7 +400,7 @@ function Plugins-On($s) {
     Put "$css\plugins\FakeMimic\models.txt" { param($p) Copy-Item (Join-Path $Here "game\models.txt") $p }
     Put "$css\shared\FakeMimicApi\FakeMimicApi.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeMimicApi\FakeMimicApi.dll") $p }
     if ($s.FakeDirector) { Put "$css\plugins\FakeDirector\FakeDirector.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeDirector\FakeDirector.dll") $p } }
-    Put "$css\plugins\FakeXray\FakeXray.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeXray\FakeXray.dll") $p }
+    if ($s.FakeWallhack) { Put "$css\plugins\FakeWallhack\FakeWallhack.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeWallhack\FakeWallhack.dll") $p } }
     # FakeMimic menu: compiled custom HUD layout
     foreach ($f in Get-ChildItem (Join-Path $Here "game\panorama") -Recurse -File) {
       Put ("panorama\" + $f.FullName.Substring((Join-Path $Here "game\panorama").Length + 1)) { param($p) Copy-Item $f.FullName $p }
@@ -477,10 +478,10 @@ function Import-OldData([string]$dir, [string]$plugin) {
 # ---------------- launch ----------------
 
 # console port and password of this run: the launcher's own netcon setting, or the session one
-# for a workshop map; port 0 = no netcon
+# for a workshop map and with plugins (Takes > Watch types playdemo into it); port 0 = no netcon
 function Netcon-Of($s) {
   if ([int]$s.NetconPort -gt 0) { return @{ Port = [int]$s.NetconPort; Pass = $s.NetconPassword } }
-  if ($s.MapKind -eq "workshop" -and $s.MapId) { return @{ Port = $SessionPort; Pass = $SessionPass } }
+  if (($s.MapKind -eq "workshop" -and $s.MapId) -or $s.Plugins) { return @{ Port = $SessionPort; Pass = $SessionPass } }
   @{ Port = 0; Pass = "" }
 }
 

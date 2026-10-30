@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeMimic", "FakeMimic\Fake
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeDirector", "FakeDirector\FakeDirector.csproj", "{5D80F4C6-93A4-4837-A88C-9B487AD30EFE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeXray", "FakeXray\FakeXray.csproj", "{B81C7EA9-0A6F-4D6B-A2E2-458156E91F93}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeWallhack", "FakeWallhack\FakeWallhack.csproj", "{B81C7EA9-0A6F-4D6B-A2E2-458156E91F93}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

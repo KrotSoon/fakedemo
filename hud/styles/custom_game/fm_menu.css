@@ -14,7 +14,7 @@
 }
 
 #menu {
-    width: 380px;
+    width: 460px;
     height: fit-children;
     flow-children: down;
     padding: 20px 16px 14px 16px;
@@ -243,12 +243,14 @@
     width: 100%;
     height: fit-children;
 }
+.Swatch { overflow: clip; }
 
+/* no side padding: it came on top of width 100% and pushed the row's right end under the panel's edge;
+   the gaps are the margins of the first and last child */
 .Item {
     width: 100%;
     height: 48px;
     margin-top: 6px;
-    padding: 0px 14px;
     flow-children: right;
     border-radius: 14px;
     background-color: #ffffff0d;
@@ -279,6 +281,7 @@
     width: 28px;
     height: 28px;
     vertical-align: center;
+    margin-left: 14px;
     margin-right: 14px;
     border-radius: 9px;
     background-color: #ffffff1a;
@@ -332,16 +335,232 @@
     }
 }
 
+/* ---- row kinds (classes on .Row set by the plugin): Tog switch, Big, Seg segments, Pal swatches, HasVal ---- */
+/* .Row layers .Block (group background, behind) and .Body (the row itself, flowing down) */
+.Body { width: 100%; flow-children: down; overflow: noclip; }
+.Block { width: 100%; height: 100%; }
+.Val, .Switch, .Opts, .Swatches { visibility: collapse; }
+.ItemText { margin-right: 14px; }
+#sb .ItemText { margin-left: 14px; }   /* Back of the settings screen has no key */
+.HasVal .ItemText, .Tog .ItemText { margin-right: 0px; }
+
+.HasVal .Val {
+    visibility: visible;
+    vertical-align: center;
+    margin-left: 8px;
+    margin-right: 14px;
+    padding: 1px 8px;
+    border: 1px solid #ffffff40;
+    border-radius: 7px;
+    font-size: 14px;
+    color: #ffffff90;
+}
+.Tog .Val { margin-right: 0px; }
+
+.Tog .Switch {
+    visibility: visible;
+    width: 42px;
+    height: 24px;
+    margin-left: 10px;
+    margin-right: 14px;
+    vertical-align: center;
+    border-radius: 12px;
+    background-color: #ffffff26;
+    transition-property: background-color;
+    transition-duration: .15s;
+}
+.Thumb {
+    width: 18px;
+    height: 18px;
+    margin: 3px;
+    border-radius: 9px;
+    background-color: #ffffff;
+    transform: translateX(0px);
+    transition-property: transform;
+    transition-duration: .28s;
+    transition-timing-function: cubic-bezier(.2, 1.6, .4, 1);
+}
+.On .Switch { background-color: #e4ae39; }
+.On .Thumb { transform: translateX(18px); }
+
+.Big .Item { height: 66px; }
+.Big .ItemText { font-size: 20px; font-weight: bold; }
+.Big.On .Item { background-color: #e4ae3940; }
+.Big.On .Key { background-color: #e4ae39; }
+.Big.On .Key Label { color: #11141a; }
+/* Primary: the screen's main action, gold; red while it stops something (Accent) */
+.Prim .Item { background-color: #e4ae3933; }
+.Prim .Item:hover { background-color: #e4ae3955; }
+.Prim .Key { background-color: #e4ae39; }
+.Prim .Key Label { color: #11141a; }
+.Prim .Item.Accent { background-color: #ff6a5533; }
+.Prim .Item.Accent:hover { background-color: #ff6a5555; }
+.Prim .Item.Accent .Key { background-color: #ff6a55; }
+.Prim .Item.Accent .Val { border: 1px solid #ff8170; color: #ff8170; }
+/* a badge of something that is on (module on, take recording) */
+.On .Val { border: 1px solid #e4ae39; color: #e4ae39; }
+
+/* a choice's text is a heading over its segments / swatches: no button look, no hover */
+.Seg .Item, .Pal .Item {
+    height: 30px;
+    margin-top: 10px;
+    background-color: none;
+    & .ItemText { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; color: #ffffff80; }
+    & .Key { width: 20px; height: 20px; border-radius: 6px; background-color: none; border: 1px solid #ffffff30; }
+    & .Key Label { font-size: 12px; color: #ffffff80; }
+}
+.Seg .Item:hover, .Pal .Item:hover, .Seg .Item:active, .Pal .Item:active {
+    background-color: none;
+    transform: translateX(0px);
+}
+.Seg .Item:hover .Key, .Pal .Item:hover .Key { background-color: none; transform: none; }
+.Seg .Item:hover .Key Label, .Pal .Item:hover .Key Label { color: #ffffff80; }
+.Seg .Item:hover .ItemText, .Pal .Item:hover .ItemText { color: #ffffff80; }
+
+/* Cards rows have the same heading */
+.Crd .Item {
+    height: 30px;
+    margin-top: 10px;
+    background-color: none;
+    & .ItemText { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; color: #ffffff80; }
+    & .Key { width: 20px; height: 20px; border-radius: 6px; background-color: none; border: 1px solid #ffffff30; }
+    & .Key Label { font-size: 12px; color: #ffffff80; }
+}
+.Crd .Item:hover, .Crd .Item:active { background-color: none; transform: translateX(0px); }
+.Crd .Item:hover .Key { background-color: none; transform: none; }
+.Crd .Item:hover .Key Label, .Crd .Item:hover .ItemText { color: #ffffff80; }
+
+/* Info: a line of text, no key, no button look */
+.Info .Item { height: 30px; background-color: none; }
+.Info .Key { visibility: collapse; }
+.Info .ItemText { margin-left: 14px; font-size: 15px; color: #ffffffa8; }
+.Info .Item:hover, .Info .Item:active { background-color: none; transform: translateX(0px); }
+.Info .Item:hover .ItemText { color: #ffffffa8; }
+
+/* Tone: the key in a verdict's colour; Faded: greyed out (a take whose demo is gone) */
+.TGood .Key { background-color: #6fd65a; }
+.TOk .Key { background-color: #ffd23c; }
+.TBad .Key { background-color: #ff6a55; }
+.TGold .Key { background-color: #e4ae39; }
+.TGood .Key Label, .TOk .Key Label, .TBad .Key Label, .TGold .Key Label { color: #11141a; }
+.Faded .Item { opacity: .45; }
+
+/* Stars: a rating, the lit stars gold, no segment background */
+.Stars .Opt { & Label { font-size: 22px; color: #ffffff38; } }
+.Stars .Opt.Lit Label { color: #e4ae39; }
+.Stars .Opt:hover Label { color: #ffd98a; }
+
+/* portrait cards: T orange / CT blue frame, the chosen one gold */
+.Cards { visibility: collapse; width: 100%; flow-children: right; margin-top: 6px; }
+.Crd .Cards { visibility: visible; }
+.Card {
+    width: 98px;
+    height: 146px;
+    margin-left: 6px;
+    flow-children: down;
+    border-radius: 10px;
+    border: 2px solid #ff963070;
+    background-color: #ffffff0d;
+    transition-property: transform, border;
+    transition-duration: .25s, .12s;
+    transition-timing-function: cubic-bezier(.2, 1.6, .4, 1), ease-out;
+    &:hover { transform: translateY(-3px); }
+    &.CT { border: 2px solid #5aa0ff70; }
+    &.Sel { border: 2px solid #e4ae39; }
+    &.Empty { visibility: collapse; }
+}
+.Portrait {
+    width: 94px;
+    height: 94px;
+    background-color: #00000050;
+    background-size: 100% 100%;
+    background-position: 50% 50%;
+}
+.CardName { horizontal-align: center; margin-top: 4px; max-width: 92px; font-size: 14px; color: #ffffff; white-space: nowrap; text-overflow: shrink; }
+.CardSub { horizontal-align: center; font-size: 11px; color: #ffffff80; }
+
+/* a new section: a line above the row */
+.Divider {
+    margin-top: 10px;
+    border-top: 1px solid #ffffff1c;
+}
+
+/* nested rows form one darker block with a gold outline (e.g. opened settings). It is drawn on the
+   .Block layer: a panel with border-radius cuts its children, so on the row itself the hovered
+   button (+12px) was cut in the block's first and last rows */
+.Sub .Block {
+    background-color: #00000055;
+    border-left: 1px solid #e4ae3955;
+    border-right: 1px solid #e4ae3955;
+}
+.SubFirst .Block { border-top: 1px solid #e4ae3955; border-radius: 14px 14px 0px 0px; }
+.SubLast .Block { border-bottom: 1px solid #e4ae3955; border-radius: 0px 0px 14px 14px; }
+.SubFirst.SubLast .Block { border-radius: 14px; }
+.SubLast .Body { padding-bottom: 8px; }
+.Sub .Item, .Sub .Opts, .Sub .Swatches { width: 410px; margin-left: 8px; }
+.SubFirst .Item { margin-top: 8px; }
+
+.Opts, .Swatches { width: 100%; flow-children: right; }
+.Seg .Opts {
+    visibility: visible;
+    margin-top: 4px;
+    border-radius: 12px;
+    background-color: #ffffff0d;
+}
+.Opt {
+    width: fill-parent-flow(1);
+    height: 34px;
+    margin: 4px 3px;
+    border-radius: 9px;
+    background-color: none;
+    transition-property: background-color;
+    transition-duration: .12s;
+    & Label { horizontal-align: center; vertical-align: center; font-size: 15px; color: #ffffffc0; }
+    &:hover { background-color: #ffffff1a; }
+    &.Sel { background-color: #e4ae39; }
+    &.Sel Label { color: #11141a; }
+    &.Empty { visibility: collapse; }
+}
+
+.Pal .Swatches {
+    visibility: visible;
+    margin-top: 6px;
+}
+.Swatch {
+    width: 58px;
+    height: 30px;
+    margin: 0px 4px 0px 6px;
+    flow-children: right;
+    border-radius: 9px;
+    border: 2px solid #ffffff20;
+    transition-property: transform;
+    transition-duration: .25s;
+    transition-timing-function: cubic-bezier(.2, 1.6, .4, 1);
+    &:hover { transform: scale3d(1.08, 1.08, 1); }
+    &.Sel { border: 2px solid #e4ae39; }
+    &.Empty { visibility: collapse; }
+}
+.Half { width: 50%; height: 100%; }
+.C0 { background-color: #ff9628; }
+.C1 { background-color: #5aa0ff; }
+.C2 { background-color: #ff5a46; }
+.C3 { background-color: #3cdcc8; }
+.C4 { background-color: #ffd23c; }
+.C5 { background-color: #8cff6e; }
+.C6 { background-color: #ffffff; }
+.C7 { background-color: #d26bff; }
+
 /* ---- settings screen ---- */
 .SettingsPanel { width: 100%; flow-children: down; }
-.Rows { width: 100%; flow-children: down; }
+/* 100% here is #menu's full 460 px, padding included: the rows ran 16 px under the right edge */
+.Rows { width: 428px; flow-children: down; }
 /* the screen not shown is folded to 0 px, clipped (no clicks either) and transparent, not collapsed:
    a collapsed panel ignored the SwapA / SwapB switch, so its rows came back without the entrance */
 .SettingsPanel, #menu.Settings .Rows { height: 0px; overflow: clip; opacity: 0; }
 #menu.Settings .SettingsPanel { height: fit-children; overflow: noclip; opacity: 1; }
 
 .Slider {
-    width: 336px;   /* the panel's 348 px minus the side margins: 100% + margins ran 12 px past the edge */
+    width: 416px;   /* the panel's 428 px minus the side margins: 100% + margins ran 12 px past the edge */
     flow-children: down;
     margin: 6px 6px 14px 6px;
 }
@@ -365,7 +584,7 @@
 }
 
 .Track {
-    width: 328px;
+    width: 408px;
     height: 24px;
 }
 
@@ -403,7 +622,7 @@
     flow-children: right;
 }
 .Hit {
-    width: 8px;
+    width: 10px;
     height: 100%;
     background-color: none;
     &:hover { background-color: #ffffff22; }
@@ -412,86 +631,86 @@
 /* slider value classes V0..V40 on #slx / #sly / #sls */
 .V0 .Fill { width: 0px; }
 .V0 .Knob { transform: translateX(0px); }
-.V1 .Fill { width: 8px; }
-.V1 .Knob { transform: translateX(8px); }
-.V2 .Fill { width: 16px; }
-.V2 .Knob { transform: translateX(16px); }
-.V3 .Fill { width: 24px; }
-.V3 .Knob { transform: translateX(24px); }
-.V4 .Fill { width: 32px; }
-.V4 .Knob { transform: translateX(32px); }
-.V5 .Fill { width: 40px; }
-.V5 .Knob { transform: translateX(40px); }
-.V6 .Fill { width: 48px; }
-.V6 .Knob { transform: translateX(48px); }
-.V7 .Fill { width: 56px; }
-.V7 .Knob { transform: translateX(56px); }
-.V8 .Fill { width: 64px; }
-.V8 .Knob { transform: translateX(64px); }
-.V9 .Fill { width: 72px; }
-.V9 .Knob { transform: translateX(72px); }
-.V10 .Fill { width: 80px; }
-.V10 .Knob { transform: translateX(80px); }
-.V11 .Fill { width: 88px; }
-.V11 .Knob { transform: translateX(88px); }
-.V12 .Fill { width: 96px; }
-.V12 .Knob { transform: translateX(96px); }
-.V13 .Fill { width: 104px; }
-.V13 .Knob { transform: translateX(104px); }
-.V14 .Fill { width: 112px; }
-.V14 .Knob { transform: translateX(112px); }
-.V15 .Fill { width: 120px; }
-.V15 .Knob { transform: translateX(120px); }
-.V16 .Fill { width: 128px; }
-.V16 .Knob { transform: translateX(128px); }
-.V17 .Fill { width: 136px; }
-.V17 .Knob { transform: translateX(136px); }
-.V18 .Fill { width: 144px; }
-.V18 .Knob { transform: translateX(144px); }
-.V19 .Fill { width: 152px; }
-.V19 .Knob { transform: translateX(152px); }
-.V20 .Fill { width: 160px; }
-.V20 .Knob { transform: translateX(160px); }
-.V21 .Fill { width: 168px; }
-.V21 .Knob { transform: translateX(168px); }
-.V22 .Fill { width: 176px; }
-.V22 .Knob { transform: translateX(176px); }
-.V23 .Fill { width: 184px; }
-.V23 .Knob { transform: translateX(184px); }
-.V24 .Fill { width: 192px; }
-.V24 .Knob { transform: translateX(192px); }
-.V25 .Fill { width: 200px; }
-.V25 .Knob { transform: translateX(200px); }
-.V26 .Fill { width: 208px; }
-.V26 .Knob { transform: translateX(208px); }
-.V27 .Fill { width: 216px; }
-.V27 .Knob { transform: translateX(216px); }
-.V28 .Fill { width: 224px; }
-.V28 .Knob { transform: translateX(224px); }
-.V29 .Fill { width: 232px; }
-.V29 .Knob { transform: translateX(232px); }
-.V30 .Fill { width: 240px; }
-.V30 .Knob { transform: translateX(240px); }
-.V31 .Fill { width: 248px; }
-.V31 .Knob { transform: translateX(248px); }
-.V32 .Fill { width: 256px; }
-.V32 .Knob { transform: translateX(256px); }
-.V33 .Fill { width: 264px; }
-.V33 .Knob { transform: translateX(264px); }
-.V34 .Fill { width: 272px; }
-.V34 .Knob { transform: translateX(272px); }
-.V35 .Fill { width: 280px; }
-.V35 .Knob { transform: translateX(280px); }
-.V36 .Fill { width: 288px; }
-.V36 .Knob { transform: translateX(288px); }
-.V37 .Fill { width: 296px; }
-.V37 .Knob { transform: translateX(296px); }
-.V38 .Fill { width: 304px; }
-.V38 .Knob { transform: translateX(304px); }
-.V39 .Fill { width: 312px; }
-.V39 .Knob { transform: translateX(312px); }
-.V40 .Fill { width: 320px; }
-.V40 .Knob { transform: translateX(320px); }
+.V1 .Fill { width: 10px; }
+.V1 .Knob { transform: translateX(10px); }
+.V2 .Fill { width: 20px; }
+.V2 .Knob { transform: translateX(20px); }
+.V3 .Fill { width: 30px; }
+.V3 .Knob { transform: translateX(30px); }
+.V4 .Fill { width: 40px; }
+.V4 .Knob { transform: translateX(40px); }
+.V5 .Fill { width: 50px; }
+.V5 .Knob { transform: translateX(50px); }
+.V6 .Fill { width: 60px; }
+.V6 .Knob { transform: translateX(60px); }
+.V7 .Fill { width: 70px; }
+.V7 .Knob { transform: translateX(70px); }
+.V8 .Fill { width: 80px; }
+.V8 .Knob { transform: translateX(80px); }
+.V9 .Fill { width: 90px; }
+.V9 .Knob { transform: translateX(90px); }
+.V10 .Fill { width: 100px; }
+.V10 .Knob { transform: translateX(100px); }
+.V11 .Fill { width: 110px; }
+.V11 .Knob { transform: translateX(110px); }
+.V12 .Fill { width: 120px; }
+.V12 .Knob { transform: translateX(120px); }
+.V13 .Fill { width: 130px; }
+.V13 .Knob { transform: translateX(130px); }
+.V14 .Fill { width: 140px; }
+.V14 .Knob { transform: translateX(140px); }
+.V15 .Fill { width: 150px; }
+.V15 .Knob { transform: translateX(150px); }
+.V16 .Fill { width: 160px; }
+.V16 .Knob { transform: translateX(160px); }
+.V17 .Fill { width: 170px; }
+.V17 .Knob { transform: translateX(170px); }
+.V18 .Fill { width: 180px; }
+.V18 .Knob { transform: translateX(180px); }
+.V19 .Fill { width: 190px; }
+.V19 .Knob { transform: translateX(190px); }
+.V20 .Fill { width: 200px; }
+.V20 .Knob { transform: translateX(200px); }
+.V21 .Fill { width: 210px; }
+.V21 .Knob { transform: translateX(210px); }
+.V22 .Fill { width: 220px; }
+.V22 .Knob { transform: translateX(220px); }
+.V23 .Fill { width: 230px; }
+.V23 .Knob { transform: translateX(230px); }
+.V24 .Fill { width: 240px; }
+.V24 .Knob { transform: translateX(240px); }
+.V25 .Fill { width: 250px; }
+.V25 .Knob { transform: translateX(250px); }
+.V26 .Fill { width: 260px; }
+.V26 .Knob { transform: translateX(260px); }
+.V27 .Fill { width: 270px; }
+.V27 .Knob { transform: translateX(270px); }
+.V28 .Fill { width: 280px; }
+.V28 .Knob { transform: translateX(280px); }
+.V29 .Fill { width: 290px; }
+.V29 .Knob { transform: translateX(290px); }
+.V30 .Fill { width: 300px; }
+.V30 .Knob { transform: translateX(300px); }
+.V31 .Fill { width: 310px; }
+.V31 .Knob { transform: translateX(310px); }
+.V32 .Fill { width: 320px; }
+.V32 .Knob { transform: translateX(320px); }
+.V33 .Fill { width: 330px; }
+.V33 .Knob { transform: translateX(330px); }
+.V34 .Fill { width: 340px; }
+.V34 .Knob { transform: translateX(340px); }
+.V35 .Fill { width: 350px; }
+.V35 .Knob { transform: translateX(350px); }
+.V36 .Fill { width: 360px; }
+.V36 .Knob { transform: translateX(360px); }
+.V37 .Fill { width: 370px; }
+.V37 .Knob { transform: translateX(370px); }
+.V38 .Fill { width: 380px; }
+.V38 .Knob { transform: translateX(380px); }
+.V39 .Fill { width: 390px; }
+.V39 .Knob { transform: translateX(390px); }
+.V40 .Fill { width: 400px; }
+.V40 .Knob { transform: translateX(400px); }
 
 /* ---- rows arrive: on opening and on another screen in an open menu ----
    The plugin flips SwapA / SwapB in the same tick it changes the texts. A class with another
@@ -539,3 +758,148 @@
 #r7 { animation-delay: .15s; }
 #r8 { animation-delay: .175s; }
 #r9 { animation-delay: .2s; }
+
+/* ---- agent portraits (one class per agent with a square portrait in pak01_dir.vpk (panorama/images/econ/characters/customplayer_*_square_png); the plugin sets P_<model file name> on a card) ---- */
+.P_ctm_diver_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_diver_varianta_square_png.vtex"); }
+.P_ctm_diver_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_diver_variantb_square_png.vtex"); }
+.P_ctm_diver_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_diver_variantc_square_png.vtex"); }
+.P_ctm_fbi { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_square_png.vtex"); }
+.P_ctm_fbi_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_varianta_square_png.vtex"); }
+.P_ctm_fbi_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_variantb_square_png.vtex"); }
+.P_ctm_fbi_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_variantc_square_png.vtex"); }
+.P_ctm_fbi_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_variantd_square_png.vtex"); }
+.P_ctm_fbi_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_variante_square_png.vtex"); }
+.P_ctm_fbi_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_variantf_square_png.vtex"); }
+.P_ctm_fbi_variantg { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_variantg_square_png.vtex"); }
+.P_ctm_fbi_varianth { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_fbi_varianth_square_png.vtex"); }
+.P_ctm_gendarmerie_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gendarmerie_varianta_square_png.vtex"); }
+.P_ctm_gendarmerie_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gendarmerie_variantb_square_png.vtex"); }
+.P_ctm_gendarmerie_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gendarmerie_variantc_square_png.vtex"); }
+.P_ctm_gendarmerie_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gendarmerie_variantd_square_png.vtex"); }
+.P_ctm_gendarmerie_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gendarmerie_variante_square_png.vtex"); }
+.P_ctm_gign { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gign_square_png.vtex"); }
+.P_ctm_gign_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gign_varianta_square_png.vtex"); }
+.P_ctm_gign_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gign_variantb_square_png.vtex"); }
+.P_ctm_gign_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gign_variantc_square_png.vtex"); }
+.P_ctm_gign_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gign_variantd_square_png.vtex"); }
+.P_ctm_gsg9 { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gsg9_square_png.vtex"); }
+.P_ctm_gsg9_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gsg9_varianta_square_png.vtex"); }
+.P_ctm_gsg9_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gsg9_variantb_square_png.vtex"); }
+.P_ctm_gsg9_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gsg9_variantc_square_png.vtex"); }
+.P_ctm_gsg9_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_gsg9_variantd_square_png.vtex"); }
+.P_ctm_heavy { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_heavy_square_png.vtex"); }
+.P_ctm_idf { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_idf_square_png.vtex"); }
+.P_ctm_idf_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_idf_variantb_square_png.vtex"); }
+.P_ctm_idf_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_idf_variantc_square_png.vtex"); }
+.P_ctm_idf_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_idf_variantd_square_png.vtex"); }
+.P_ctm_idf_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_idf_variante_square_png.vtex"); }
+.P_ctm_idf_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_idf_variantf_square_png.vtex"); }
+.P_ctm_sas { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_sas_square_png.vtex"); }
+.P_ctm_sas_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_sas_varianta_square_png.vtex"); }
+.P_ctm_sas_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_sas_variantb_square_png.vtex"); }
+.P_ctm_sas_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_sas_variantc_square_png.vtex"); }
+.P_ctm_sas_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_sas_variantd_square_png.vtex"); }
+.P_ctm_sas_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_sas_variantf_square_png.vtex"); }
+.P_ctm_sas_variantg { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_sas_variantg_square_png.vtex"); }
+.P_ctm_st6 { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_square_png.vtex"); }
+.P_ctm_st6_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_varianta_square_png.vtex"); }
+.P_ctm_st6_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantb_square_png.vtex"); }
+.P_ctm_st6_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantc_square_png.vtex"); }
+.P_ctm_st6_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantd_square_png.vtex"); }
+.P_ctm_st6_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variante_square_png.vtex"); }
+.P_ctm_st6_variantg { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantg_square_png.vtex"); }
+.P_ctm_st6_varianti { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_varianti_square_png.vtex"); }
+.P_ctm_st6_variantj { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantj_square_png.vtex"); }
+.P_ctm_st6_variantk { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantk_square_png.vtex"); }
+.P_ctm_st6_variantl { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantl_square_png.vtex"); }
+.P_ctm_st6_variantm { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantm_square_png.vtex"); }
+.P_ctm_st6_variantn { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_st6_variantn_square_png.vtex"); }
+.P_ctm_swat { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_square_png.vtex"); }
+.P_ctm_swat_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_varianta_square_png.vtex"); }
+.P_ctm_swat_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variantb_square_png.vtex"); }
+.P_ctm_swat_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variantc_square_png.vtex"); }
+.P_ctm_swat_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variantd_square_png.vtex"); }
+.P_ctm_swat_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variante_square_png.vtex"); }
+.P_ctm_swat_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variantf_square_png.vtex"); }
+.P_ctm_swat_variantg { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variantg_square_png.vtex"); }
+.P_ctm_swat_varianth { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_varianth_square_png.vtex"); }
+.P_ctm_swat_varianti { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_varianti_square_png.vtex"); }
+.P_ctm_swat_variantj { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variantj_square_png.vtex"); }
+.P_ctm_swat_variantk { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_swat_variantk_square_png.vtex"); }
+.P_t_map_based_large { background-image: url("s2r://panorama/images/econ/characters/customplayer_t_map_based_large_square_png.vtex"); }
+.P_t_map_based { background-image: url("s2r://panorama/images/econ/characters/customplayer_t_map_based_square_png.vtex"); }
+.P_tm_anarchist { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_anarchist_square_png.vtex"); }
+.P_tm_anarchist_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_anarchist_varianta_square_png.vtex"); }
+.P_tm_anarchist_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_anarchist_variantb_square_png.vtex"); }
+.P_tm_anarchist_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_anarchist_variantc_square_png.vtex"); }
+.P_tm_anarchist_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_anarchist_variantd_square_png.vtex"); }
+.P_tm_balkan_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_varianta_square_png.vtex"); }
+.P_tm_balkan_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantb_square_png.vtex"); }
+.P_tm_balkan_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantc_square_png.vtex"); }
+.P_tm_balkan_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantd_square_png.vtex"); }
+.P_tm_balkan_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variante_square_png.vtex"); }
+.P_tm_balkan_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantf_square_png.vtex"); }
+.P_tm_balkan_variantg { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantg_square_png.vtex"); }
+.P_tm_balkan_varianth { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_varianth_square_png.vtex"); }
+.P_tm_balkan_varianti { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_varianti_square_png.vtex"); }
+.P_tm_balkan_variantj { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantj_square_png.vtex"); }
+.P_tm_balkan_variantk { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantk_square_png.vtex"); }
+.P_tm_balkan_variantl { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_balkan_variantl_square_png.vtex"); }
+.P_tm_jumpsuit_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jumpsuit_varianta_square_png.vtex"); }
+.P_tm_jumpsuit_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jumpsuit_variantb_square_png.vtex"); }
+.P_tm_jumpsuit_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jumpsuit_variantc_square_png.vtex"); }
+.P_tm_jungle_raider_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_varianta_square_png.vtex"); }
+.P_tm_jungle_raider_variantb2 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_variantb2_square_png.vtex"); }
+.P_tm_jungle_raider_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_variantb_square_png.vtex"); }
+.P_tm_jungle_raider_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_variantc_square_png.vtex"); }
+.P_tm_jungle_raider_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_variantd_square_png.vtex"); }
+.P_tm_jungle_raider_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_variante_square_png.vtex"); }
+.P_tm_jungle_raider_variantf2 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_variantf2_square_png.vtex"); }
+.P_tm_jungle_raider_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_jungle_raider_variantf_square_png.vtex"); }
+.P_tm_leet_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_varianta_square_png.vtex"); }
+.P_tm_leet_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_variantb_square_png.vtex"); }
+.P_tm_leet_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_variantc_square_png.vtex"); }
+.P_tm_leet_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_variantd_square_png.vtex"); }
+.P_tm_leet_variante { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_variante_square_png.vtex"); }
+.P_tm_leet_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_variantf_square_png.vtex"); }
+.P_tm_leet_variantg { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_variantg_square_png.vtex"); }
+.P_tm_leet_varianth { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_varianth_square_png.vtex"); }
+.P_tm_leet_varianti { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_varianti_square_png.vtex"); }
+.P_tm_leet_variantj { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_leet_variantj_square_png.vtex"); }
+.P_tm_phoenix_heavy { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_heavy_square_png.vtex"); }
+.P_tm_phoenix { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_square_png.vtex"); }
+.P_tm_phoenix_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_varianta_square_png.vtex"); }
+.P_tm_phoenix_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_variantb_square_png.vtex"); }
+.P_tm_phoenix_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_variantc_square_png.vtex"); }
+.P_tm_phoenix_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_variantd_square_png.vtex"); }
+.P_tm_phoenix_variantf { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_variantf_square_png.vtex"); }
+.P_tm_phoenix_variantg { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_variantg_square_png.vtex"); }
+.P_tm_phoenix_varianth { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_varianth_square_png.vtex"); }
+.P_tm_phoenix_varianti { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_phoenix_varianti_square_png.vtex"); }
+.P_tm_pirate { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_pirate_square_png.vtex"); }
+.P_tm_pirate_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_pirate_varianta_square_png.vtex"); }
+.P_tm_pirate_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_pirate_variantb_square_png.vtex"); }
+.P_tm_pirate_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_pirate_variantc_square_png.vtex"); }
+.P_tm_pirate_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_pirate_variantd_square_png.vtex"); }
+.P_tm_professional { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_square_png.vtex"); }
+.P_tm_professional_var1 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_var1_square_png.vtex"); }
+.P_tm_professional_var2 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_var2_square_png.vtex"); }
+.P_tm_professional_var3 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_var3_square_png.vtex"); }
+.P_tm_professional_var4 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_var4_square_png.vtex"); }
+.P_tm_professional_varf1 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varf1_square_png.vtex"); }
+.P_tm_professional_varf2 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varf2_square_png.vtex"); }
+.P_tm_professional_varf3 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varf3_square_png.vtex"); }
+.P_tm_professional_varf4 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varf4_square_png.vtex"); }
+.P_tm_professional_varf5 { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varf5_square_png.vtex"); }
+.P_tm_professional_varf { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varf_square_png.vtex"); }
+.P_tm_professional_varg { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varg_square_png.vtex"); }
+.P_tm_professional_varh { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varh_square_png.vtex"); }
+.P_tm_professional_vari { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_vari_square_png.vtex"); }
+.P_tm_professional_varj { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_professional_varj_square_png.vtex"); }
+.P_tm_separatist { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_separatist_square_png.vtex"); }
+.P_tm_separatist_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_separatist_varianta_square_png.vtex"); }
+.P_tm_separatist_variantb { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_separatist_variantb_square_png.vtex"); }
+.P_tm_separatist_variantc { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_separatist_variantc_square_png.vtex"); }
+.P_tm_separatist_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_separatist_variantd_square_png.vtex"); }
+.P_ct_map_based { background-image: url("s2r://panorama/images/econ/characters/customplayer_ct_map_based_png.vtex"); }
+

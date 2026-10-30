@@ -165,6 +165,7 @@ public partial class FakeMimic : BasePlugin
         });
         RegisterListener<Listeners.OnCustomHudClicked>(OnHudClicked);
         LoadMenuPrefs();
+        LoadBotsPrefs();
         LoadModels();
         if (hotReload)
         {
@@ -290,9 +291,78 @@ public partial class FakeMimic : BasePlugin
     // wrong on a T bot playing a CT recording until it dropped and picked them up again.
     const float ModelDelay = 0.2f, WeaponsDelay = 0.35f, StartDelay = 0.5f;
 
+    // ---------------- playing: once or in a loop ----------------
+    // A setting of the start, not of a movement: in a loop every bot starts again together, after the
+    // longest movement (with its timing offset) has ended and LoopPause has passed. Takes and recording
+    // over the bots always run once (Go). Kept in Documents\FakeDemo\bots.txt.
+    const float LoopPause = 1f;
+    bool _loop;
+    int _loopGen;        // a newer start / stop cancels the pending restart
+    bool _looping;       // between two passes the bots stand, but playing is still on
+    bool _starting;      // Go was called, the replays start after StartDelay
+
+    string BotsPrefsPath => Path.Combine(FakeDemoPaths.Root, "bots.txt");
+
+    void LoadBotsPrefs()
+    {
+        try { _loop = File.ReadAllText(BotsPrefsPath).Trim() == "loop"; }
+        catch (Exception) { /* no file: once */ }
+    }
+
+    void SetLoop(bool loop)
+    {
+        _loop = loop;
+        Directory.CreateDirectory(FakeDemoPaths.Root);
+        File.WriteAllText(BotsPrefsPath, loop ? "loop" : "once");
+    }
+
+    string Play(Action? onStarted = null)
+    {
+        var msg = Go(onStarted);
+        if (!_loop || _replays.Count == 0) return msg;
+        var gen = _loopGen;
+        _looping = true;
+        var seconds = _replays.Max(r => (Math.Max(0, r.Edits.OffsetTicks) + Prepare(r.Rec, r.Edits).Ticks.Length) / (float)TicksPerSecond);
+        AddTimer(StartDelay + seconds + LoopPause, () =>
+        {
+            if (gen != _loopGen || !_loop) return;
+            var p = LocalHuman();
+            Play(p == null ? null : () => Reshow(p, "FakeMimic", MainMenu));
+        });
+        return msg + $", in a loop every {seconds + LoopPause:0.0} s";
+    }
+
+    // a take's set of bots again, in a loop (Takes > Preview): the same assignments only start; otherwise
+    // the bots are replaced, one assignment after the other (two at once land on the same new bot)
+    string PlaySetup(string folder, IReadOnlyList<TakeBot> bots, Action? started)
+    {
+        if (_bc == null) return "CS2-Bot-Controller is not installed";
+        if (folder != _category) SetFolder(folder);
+        static string Key(IEnumerable<(string Name, int Team)> set) => string.Join("|", set.Select(x => $"{x.Name}:{x.Team}").Order());
+        var now = Key(_replays.Where(r => r.Bot is { IsValid: true }).Select(r => (r.Name, (int)r.Bot!.TeamNum)));
+        _loop = true;   // for this run only: the saved Bots play mode stays
+        if (now == Key(bots.Select(b => (b.Recording, b.Team)))) return Play(started);
+
+        Halt();
+        _replays.Clear();
+        Server.ExecuteCommand("fd_botkick");
+        var gen = ++_loopGen;
+        void Next(int i)
+        {
+            if (gen != _loopGen) return;   // stopped or started otherwise meanwhile
+            if (i == bots.Count) { Play(started); return; }
+            Assign(bots[i].Recording, bots[i].Team == 3 ? "ct" : "t", _ => AddTimer(0.3f, () => Next(i + 1)));
+        }
+        AddTimer(0.5f, () => Next(0));
+        return $"setting up {bots.Count} bot(s) of this take, then they play it in a loop";
+    }
+
     string Go(Action? onStarted = null)
     {
         if (_bc == null) return "CS2-Bot-Controller is not installed";
+        _loopGen++;
+        _looping = false;
+        _starting = true;
         _replays.RemoveAll(r => r.Bot is not { IsValid: true });
         ClearPaths();
         foreach (var r in _replays)
@@ -314,6 +384,7 @@ public partial class FakeMimic : BasePlugin
         });
         AddTimer(StartDelay, () =>
         {
+            _starting = false;
             foreach (var r in replays)
             {
                 var bot = r.Bot!;
@@ -344,6 +415,8 @@ public partial class FakeMimic : BasePlugin
 
     string Halt()
     {
+        _loopGen++;
+        _looping = false;
         foreach (var r in _replays.Where(r => r.Bot is { IsValid: true }))
         {
             _bc?.StopReplay(r.Bot!.Slot);
@@ -355,6 +428,8 @@ public partial class FakeMimic : BasePlugin
 
     string Clear()
     {
+        _loopGen++;
+        _looping = false;
         foreach (var r in _replays.Where(r => r.Bot is { IsValid: true }))
         {
             _bc?.StopReplay(r.Bot!.Slot);
@@ -401,8 +476,35 @@ public partial class FakeMimic : BasePlugin
     // fm_hud_file switches it for layout development (a new file name is never a cached one)
     static string HudLayout = "panorama/layout/custom_game/fm_menu.xml";
 
-    record MenuItem(string Text, Action<CCSPlayerController> Pick, bool Accent = false);   // Accent: salmon row (stop, delete)
-    record Menu(string Title, List<MenuItem> Items, bool Main = false);   // Close (9) only on the main menu
+    // Accent: salmon row (stop, delete); the rest as in ApiMenuItem
+    record MenuItem(string Text, Action<CCSPlayerController> Pick, bool Accent = false)
+    {
+        public ApiRowKind Kind { get; init; }
+        public bool Nested { get; init; }
+        public bool Divider { get; init; }
+        public bool On { get; init; }
+        public string? Value { get; init; }
+        public IReadOnlyList<string>? Options { get; init; }
+        public IReadOnlyList<(int A, int B)>? Swatches { get; init; }
+        public IReadOnlyList<ApiCard>? Cards { get; init; }
+        public ApiTone Tone { get; init; }
+        public bool Faded { get; init; }
+        public int Selected { get; init; }
+        public Action<CCSPlayerController, int>? Choose { get; init; }
+        public int Count => Kind switch
+        {
+            ApiRowKind.Choice or ApiRowKind.Stars => Options?.Count ?? 0,
+            ApiRowKind.Colors => Swatches?.Count ?? 0,
+            ApiRowKind.Cards => Cards?.Count ?? 0,
+            _ => 0,
+        };
+    }
+    // Close (9) on the main menu, "← Back" when Back is set
+    record Menu(string Title, List<MenuItem> Items, bool Main = false, Action<CCSPlayerController>? Back = null);
+
+    const int RowOptions = 5;   // segments (stars) per row in the layout
+    const int RowSwatches = 4;  // colour swatches per row
+    const int RowCards = 4;     // portrait cards per row
 
     Menu? _menu;
     CCSCustomHudLayout? _hud;
@@ -423,7 +525,12 @@ public partial class FakeMimic : BasePlugin
         if (_hud is { IsValid: true }) return _hud;
         _hud = Utilities.CreateEntityByName<CCSCustomHudLayout>("custom_hud_layout");
         if (_hud == null) return null;
-        foreach (var k in _applied.Keys.ToList()) _applied[k] = k switch { "posx" => "X20", "posy" => "Y20", "poss" => "S0", _ => "V0" };
+        foreach (var k in _applied.Keys.ToList())
+        {
+            if (k[0] is 'w' or 'c') _applied.Remove(k);   // swatch colours, portraits: none in a new layout
+            else _applied[k] = k switch { "posx" => "X20", "posy" => "Y20", "poss" => "S0", _ => "V0" };
+        }
+        _cls.Clear();
         var kv = new CEntityKeyValues();
         kv.SetString("layout", HudLayout);
         _hud.DispatchSpawn(kv);
@@ -434,6 +541,8 @@ public partial class FakeMimic : BasePlugin
 
     void Show(CCSPlayerController p, Menu m)
     {
+        // the same screen shown again from one of its rows (a switch flipped): no entrance
+        var update = _picking != null && _picking == m.Title && !_settingsOpen;
         _menu = m;
         SetDigits(true);
         var hud = Hud();
@@ -441,19 +550,94 @@ public partial class FakeMimic : BasePlugin
         hud.SetDialogVariableString("menu", "title", Plain(m.Title));
         for (var i = 1; i <= 9; i++)
         {
-            var item = i <= m.Items.Count ? m.Items[i - 1] : null;
+            var item = i < 9 && i <= m.Items.Count ? m.Items[i - 1] : null;
             // digits are drawn as key hints by the layout, so the text has no number
-            var text = i == 9 ? (m.Main ? "Close" : "") : item != null ? Plain(item.Text) : "";
+            var text = i == 9 ? (m.Main ? "Close" : m.Back != null ? "← Back" : "") : item != null ? Plain(item.Text) : "";
             hud.SetDialogVariableString("menu", $"t{i}", text);
-            hud.SetHasClass($"b{i}", "Empty", text.Length == 0);
-            hud.SetHasClass($"b{i}", "Accent", i != 9 && item?.Accent == true);
+            Cls(hud, $"b{i}", "Empty", text.Length == 0);
+            Cls(hud, $"b{i}", "Accent", item?.Accent == true);
+            if (i == 9) continue;
+            var kind = item?.Kind ?? ApiRowKind.Button;
+            Cls(hud, $"r{i}", "Tog", kind is ApiRowKind.Toggle or ApiRowKind.BigToggle);
+            Cls(hud, $"r{i}", "Big", kind is ApiRowKind.BigToggle or ApiRowKind.Primary);
+            Cls(hud, $"r{i}", "Prim", kind == ApiRowKind.Primary);
+            Cls(hud, $"r{i}", "On", item?.On == true);
+            Cls(hud, $"r{i}", "Seg", kind is ApiRowKind.Choice or ApiRowKind.Stars);
+            Cls(hud, $"r{i}", "Stars", kind == ApiRowKind.Stars);
+            Cls(hud, $"r{i}", "Pal", kind == ApiRowKind.Colors);
+            Cls(hud, $"r{i}", "Crd", kind == ApiRowKind.Cards);
+            Cls(hud, $"r{i}", "Info", kind == ApiRowKind.Info);
+            Cls(hud, $"r{i}", "Faded", item?.Faded == true);
+            foreach (var tone in new[] { ApiTone.Good, ApiTone.Ok, ApiTone.Bad, ApiTone.Gold })
+                Cls(hud, $"r{i}", $"T{tone}", item?.Tone == tone);
+            for (var k = 0; k < RowCards; k++)
+            {
+                var card = kind == ApiRowKind.Cards && item!.Cards != null && k < item.Cards.Count ? item.Cards[k] : null;
+                Cls(hud, $"c{i}_{k}", "Empty", card == null);
+                if (card == null) continue;
+                Cls(hud, $"c{i}_{k}", "Sel", item!.Selected == k);
+                Cls(hud, $"c{i}_{k}", "CT", card.Team == 3);
+                hud.SetDialogVariableString("menu", $"cn{i}_{k}", card.Title);
+                hud.SetDialogVariableString("menu", $"cs{i}_{k}", card.Subtitle);
+                SetOnly(hud, $"c{i}_{k}p", "P_" + Portrait(card.Model, card.Team));
+            }
+            bool NestedAt(int n) => n >= 1 && n <= Math.Min(8, m.Items.Count) && m.Items[n - 1].Nested;
+            var nested = NestedAt(i);
+            Cls(hud, $"r{i}", "Sub", nested);
+            Cls(hud, $"r{i}", "SubFirst", nested && !NestedAt(i - 1));
+            Cls(hud, $"r{i}", "SubLast", nested && !NestedAt(i + 1));
+            Cls(hud, $"r{i}", "Divider", item?.Divider == true);
+            hud.SetDialogVariableString("menu", $"val{i}", item?.Value ?? "");
+            Cls(hud, $"r{i}", "HasVal", !string.IsNullOrEmpty(item?.Value));
+            for (var k = 0; k < RowOptions; k++)
+            {
+                var used = item != null && k < item.Count;
+                var segs = kind is ApiRowKind.Choice or ApiRowKind.Stars;
+                if (segs) hud.SetDialogVariableString("menu", $"o{i}_{k}", used ? item!.Options![k] : "");
+                Cls(hud, $"o{i}_{k}", "Empty", !used || !segs);
+                Cls(hud, $"o{i}_{k}", "Sel", used && kind == ApiRowKind.Choice && item!.Selected == k);
+                Cls(hud, $"o{i}_{k}", "Lit", used && kind == ApiRowKind.Stars && k <= item!.Selected);
+                if (k >= RowSwatches) continue;
+                Cls(hud, $"w{i}_{k}", "Empty", !used || kind != ApiRowKind.Colors);
+                Cls(hud, $"w{i}_{k}", "Sel", used && item!.Selected == k);
+                if (used && kind == ApiRowKind.Colors)
+                {
+                    SetOnly(hud, $"w{i}_{k}a", $"C{item!.Swatches![k].A}");
+                    SetOnly(hud, $"w{i}_{k}b", $"C{item.Swatches[k].B}");
+                }
+            }
         }
         ApplyMenuPrefs(hud);
-        Swap(hud);   // replay the rows' entrance: opening and switching look the same
+        if (!update) Swap(hud);   // replay the rows' entrance: opening and switching look the same
         _settingsOpen = false;
         hud.SetHasClass("menu", "Settings", false);
         hud.SetHasClass("menu", "Hidden", false);
         hud.SetInputCaptureEnabled(p, true);
+    }
+
+    // portrait class of a model: agents/models/tm_leet/tm_leet_varianta.vmdl -> tm_leet_varianta (fm_menu.css
+    // has P_<name> for every agent with a portrait in the game), the team's default without a model
+    // a model without a portrait (or none known) takes the first agent of its faction, then of its team
+    const string DefaultPortrait = "default";   // the game's "map-based agent" picture, for the Default choice
+
+    string Portrait(string model, int team)
+    {
+        if (model == DefaultPortrait) return team == 3 ? "ct_map_based" : "t_map_based";
+        var name = string.IsNullOrEmpty(model) ? "" : Path.GetFileNameWithoutExtension(model);
+        var names = _models.Select(Path.GetFileNameWithoutExtension).OfType<string>().Where(n => n != "tm_leet_variantk").ToList();
+        if (names.Contains(name)) return name;
+        var faction = name.Length > 0 ? names.FirstOrDefault(n => n.StartsWith(name.Split("_variant")[0])) : null;
+        return faction ?? names.FirstOrDefault(n => n.StartsWith(team == 3 ? "ctm_" : "tm_")) ?? (team == 3 ? "ct_map_based" : "t_map_based");
+    }
+
+    // classes on the layout as last sent: a screen update sends only what changed
+    readonly Dictionary<(string, string), bool> _cls = new();
+
+    void Cls(CCSCustomHudLayout hud, string panel, string cls, bool on)
+    {
+        if (_cls.TryGetValue((panel, cls), out var was) && was == on) return;
+        hud.SetHasClass(panel, cls, on);
+        _cls[(panel, cls)] = on;
     }
 
     // The layout replays the rows' entrance (keyframes) whenever the class on #menu switches between
@@ -532,8 +716,20 @@ public partial class FakeMimic : BasePlugin
             ApplyMenuPrefs(_hud);
             return;
         }
-        // menu rows are b1..b9
-        if (buttonId.Length == 2 && buttonId[0] == 'b') Pick(player, buttonId[1] - '0');
+        // segments o<row>_<n>, swatches w<row>_<n>
+        if (buttonId.Length == 4 && buttonId[0] is 'o' or 'w' or 'c' && buttonId[2] == '_')
+        {
+            Choose(player, buttonId[1] - '0', buttonId[3] - '0');
+            return;
+        }
+        // menu rows are b1..b9; the heading of a choice is not a button (its digit still picks the next one)
+        if (buttonId.Length == 2 && buttonId[0] == 'b')
+        {
+            var n = buttonId[1] - '0';
+            if (_menu != null && n >= 1 && n <= Math.Min(8, _menu.Items.Count)
+                && (_menu.Items[n - 1].Count > 0 || _menu.Items[n - 1].Kind == ApiRowKind.Info)) return;
+            Pick(player, n);
+        }
     }
 
     // ---------------- window position / size (Settings screen, remembered between sessions) ----------------
@@ -603,70 +799,161 @@ public partial class FakeMimic : BasePlugin
     void Pick(CCSPlayerController p, int n)
     {
         if (_menu == null) return;
-        if (n == 9 || n > _menu.Items.Count) { if (n == 9 && _menu.Main) CloseMenu(p); return; }
+        if (n == 9)
+        {
+            if (_menu.Main) CloseMenu(p);
+            else if (_menu.Back != null) Run(p, _menu.Back);
+            return;
+        }
+        if (n > _menu.Items.Count) return;
         var item = _menu.Items[n - 1];
-        // the pick may open another screen (Show keeps the menu and replays the entrance); if it does
-        // not (an action, a name asked in chat), the menu closes
+        if (item.Kind == ApiRowKind.Info) return;
+        if (item.Count > 0) Choose(p, n, (item.Selected + 1) % item.Count);   // a digit on a choice: the next one
+        else Run(p, item.Pick);
+    }
+
+    void Choose(CCSPlayerController p, int n, int option)
+    {
+        if (_menu == null || n < 1 || n > _menu.Items.Count) return;
+        var item = _menu.Items[n - 1];
+        if (item.Choose == null || option < 0 || option >= item.Count) return;
+        Run(p, pl => item.Choose(pl, option));
+    }
+
+    string? _picking;   // title of the screen whose row is being run
+
+    // the action may open another screen (Show keeps the menu and replays the entrance) or the same one
+    // again (updated in place); if it shows none (an action, a name asked in chat), the menu closes
+    void Run(CCSPlayerController p, Action<CCSPlayerController> action)
+    {
+        _picking = _menu?.Title;
         _menu = null;
         _awaitText = null;   // a chat question belongs to the screen it was asked on
-        item.Pick(p);
+        try { action(p); }
+        finally { _picking = null; }
         if (_menu == null) CloseMenu(p);
     }
 
-    void AskText(CCSPlayerController p, string prompt, Action<CCSPlayerController, string> then)
+    bool _awaitRaw;   // free text (a note), not a name
+
+    void AskText(CCSPlayerController p, string prompt, Action<CCSPlayerController, string> then, bool raw = false)
     {
         _awaitText = then;
+        _awaitRaw = raw;
         Say(p, prompt + " (type it in chat, empty = cancel)");
     }
 
     HookResult OnSay(CCSPlayerController? p, CommandInfo cmd)
     {
         if (_awaitText == null || p == null) return HookResult.Continue;
-        var text = cmd.GetArg(1).Trim();
+        // the whole line: "say a b" from the console arrives as two arguments, from the chat as one quoted
+        var text = cmd.ArgString.Trim().Trim('"').Trim();
         var then = _awaitText;
         _awaitText = null;
-        // only latin letters, digits, _ and - (also used as file and folder names)
-        var clean = new string(text.Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').ToArray());
+        // names: only latin letters, digits, _ and - (also used as file and folder names)
+        var clean = _awaitRaw ? text : new string(text.Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').ToArray());
         if (clean.Length == 0) Say(p, "cancelled");
         else then(p, clean);
         return HookResult.Handled;   // the name does not appear in chat
     }
 
+    // Folder on top (recent folders as segments), then one big button for what to do now (record, or stop
+    // the recording / take that runs), the bots, the take, and the modules below a line
     void MainMenu(CCSPlayerController p)
     {
-        var items = new List<MenuItem>();
-        // most used first: movements and folder right under recording
-        if (_recName == null)
-            // with bots assigned they start in the same tick as the recording, so it lines up with them later
-            items.Add(new("Record new movement", NewMovementMenu));
+        var recent = RecentFolders();
+        var many = recent.Count > ShownFolders;
+        var shown = recent.Take(ShownFolders).ToList();
+        var items = new List<MenuItem>
+        {
+            new("Folder", _ => { })
+            {
+                Kind = ApiRowKind.Choice, Options = shown.Append(many ? "All ›" : "+ New").ToList(), Selected = 0,
+                Choose = (pl, i) =>
+                {
+                    if (i < shown.Count) { SetFolder(shown[i]); Say(pl, $"folder: {shown[i]}"); MainMenu(pl); }
+                    else if (many) CategoriesMenu(pl);
+                    else NewFolder(pl);
+                },
+            },
+        };
+        if (_take != null)
+            items.Add(new($"Stop take '{_take}'", pl => { Say(pl, StopTake()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
+        else if (_recName != null)
+            items.Add(new($"Stop and save '{_recName}'", pl => { Say(pl, StopRec()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
         else
-            items.Add(new($"Stop and save '{_recName}'", pl => { Say(pl, StopRec()); MainMenu(pl); }, Accent: true));
-        items.Add(new("Movements in this folder", RecordingsMenu));
-        items.Add(new($"Folder: <font color='#ffd27f'>{_category}</font>", CategoriesMenu));
+            // with bots assigned they start in the same tick as the recording, so it lines up with them later
+            items.Add(new("Record new movement", NewMovementMenu) { Kind = ApiRowKind.Primary });
+        items.Add(new("Movements ›", RecordingsMenu) { Value = Names().Count().ToString() });
+
+        // Off / Once / Loop: starting and how, in one row; the segment of what plays now is lit
+        var assigned = _replays.Count(r => r.Bot is { IsValid: true });
+        var playing = _replays.Any(r => r.Running) || _looping || _starting;
+        items.Add(new("Bots play", _ => { })
+        {
+            Kind = ApiRowKind.Choice, Options = new[] { "Off", "Once", "Loop" }, Selected = !playing ? 0 : _loop ? 2 : 1,
+            Value = $"{assigned} assigned", Divider = true,
+            Choose = (pl, i) =>
+            {
+                if (i == 0) Say(pl, Halt());
+                else if (assigned == 0) Say(pl, "no bots assigned: Movements › a movement › Play on T/CT bot");
+                else
+                {
+                    SetLoop(i == 2);
+                    // the bots start half a second later: the menu stays and shows it then
+                    Say(pl, Play(() => Reshow(pl, "FakeMimic", MainMenu)));
+                }
+                MainMenu(pl);
+            },
+        });
+        items.Add(new("Clear assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
         if (_take == null)
             items.Add(new("Start take (bots + demo)", pl => Say(pl, StartTake())));
         else
-            items.Add(new($"Stop take '{_take}'", pl => { Say(pl, StopTake()); MainMenu(pl); }, Accent: true));
-        // one row: start or stop, whichever applies (leaves room for add-ons)
-        if (_replays.Any(r => r.Running))
-            items.Add(new("Stop all bots", pl => { Say(pl, Halt()); MainMenu(pl); }));
-        else
-            items.Add(new("Start all bots", pl => Say(pl, Go())));
-        items.Add(new("Clear bot assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
-        // modules (FakeDirector, FakeXray, ...): one row each, each opens its own screen;
+            items.Add(new("Take is recording", pl => { Say(pl, StopTake()); MainMenu(pl); }) { Value = "REC", On = true });
+
+        // modules (FakeDirector, FakeWallhack, ...): one row each, each opens its own screen;
         // more than fit go behind one "Modules" row
         var free = 8 - items.Count;
-        if (_addonItems.Count <= free) items.AddRange(_addonItems.Select(a => new MenuItem(a.Text(), a.Pick)));
-        else items.Add(new("Modules ›", ModulesMenu));
+        var modules = _addonItems.Count <= free ? _addonItems.Select(a => FromApi(a())).ToList() : new() { new("Modules ›", ModulesMenu) };
+        if (modules.Count > 0) modules[0] = modules[0] with { Divider = true };
+        items.AddRange(modules);
         Show(p, new Menu("FakeMimic", items, Main: true));
     }
 
     void ModulesMenu(CCSPlayerController p)
     {
-        var items = _addonItems.Take(7).Select(a => new MenuItem(a.Text(), a.Pick)).ToList();
-        items.Add(new("← Back", MainMenu));
-        Show(p, new Menu("Modules", items));
+        var items = _addonItems.Take(8).Select(a => FromApi(a())).ToList();
+        Show(p, new Menu("Modules", items, Back: MainMenu));
     }
+
+    // ---------------- folders ----------------
+    // The main menu shows the current folder and the ones used before it (Documents\FakeDemo\recordings\<map>\recent.txt);
+    // with more folders than fit, the last segment opens all of them.
+    const int ShownFolders = 3;
+
+    string RecentPath => Path.Combine(MapRoot, "recent.txt");
+
+    // every folder of the map, the current one first, then by last use, then the rest by name
+    List<string> RecentFolders()
+    {
+        var all = Categories().ToList();
+        var list = new List<string> { _category };
+        try { list.AddRange(File.ReadAllLines(RecentPath).Where(all.Contains)); }
+        catch (Exception) { /* no file yet */ }
+        list.AddRange(all);
+        return list.Distinct().ToList();
+    }
+
+    void SetFolder(string folder)
+    {
+        _category = folder;
+        Directory.CreateDirectory(MapDir);
+        File.WriteAllLines(RecentPath, RecentFolders());
+    }
+
+    void NewFolder(CCSPlayerController p) => AskText(p, "folder name (one moment = one folder)",
+        (pl, n) => { SetFolder(n); Say(pl, $"folder: {n}"); MainMenu(pl); });
 
     // a name is optional: 1 records under the next free default name (m1, m2, ...), or a name typed in
     // chat while this screen is open starts the recording under that name
@@ -687,21 +974,33 @@ public partial class FakeMimic : BasePlugin
         Say(p, $"1 = record as '{name}', or type your own name in chat");
     }
 
-    void CategoriesMenu(CCSPlayerController p)
+    // all folders of the map, by name, 6 per page
+    void CategoriesMenu(CCSPlayerController p) => CategoriesMenu(p, 0);
+
+    void CategoriesMenu(CCSPlayerController p, int page)
     {
-        var items = Categories().Take(6).Select(c => new MenuItem(c == _category ? $"<font color='#ffd27f'>{c}</font>" : c,
-            pl => { _category = c; Say(pl, $"folder: {c}"); MainMenu(pl); })).ToList();
-        items.Add(new("New folder", pl => AskText(pl, "folder name (one moment = one folder)",
-            (pl2, n) => { _category = n; Directory.CreateDirectory(MapDir); Say(pl2, $"folder: {n}"); MainMenu(pl2); })));
-        items.Add(new("← Back", MainMenu));
-        Show(p, new Menu($"Folders on {Server.MapName}", items));
+        var entries = new List<MenuItem> { new("+ New folder", NewFolder) };
+        entries.AddRange(Categories().Select(c => new MenuItem(c, pl => { SetFolder(c); Say(pl, $"folder: {c}"); MainMenu(pl); })
+            { Value = c == _category ? "current" : null, On = c == _category }));
+        ShowPaged(p, $"Folders on {Server.MapName}", entries, page, CategoriesMenu, MainMenu);
     }
+
+    string RecordingsTitle => $"Movements in {_category}";
 
     void RecordingsMenu(CCSPlayerController p)
     {
         var items = Names().Take(7).Select(n => new MenuItem(Describe(n), pl => RecordingMenu(pl, n))).ToList();
         items.Add(new("← Back", MainMenu));
-        Show(p, new Menu($"Movements in {_category}", items));
+        Show(p, new Menu(RecordingsTitle, items));
+    }
+
+    // something finished later (a bot joined, bots started): update the screen in place if it is still open
+    void Reshow(CCSPlayerController p, string title, Action<CCSPlayerController> screen)
+    {
+        if (_menu?.Title != title || p is not { IsValid: true }) return;
+        _picking = title;
+        try { screen(p); }
+        finally { _picking = null; }
     }
 
     void RecordingMenu(CCSPlayerController p, string name)
@@ -768,7 +1067,7 @@ public partial class FakeMimic : BasePlugin
     }
 
     [ConsoleCommand("fm_go", "fm_go - respawn assigned bots and start all replays")]
-    public void CmdGo(CCSPlayerController? caller, CommandInfo cmd) => cmd.ReplyToCommand("[FM] " + Go());
+    public void CmdGo(CCSPlayerController? caller, CommandInfo cmd) => cmd.ReplyToCommand("[FM] " + Play());
 
     [ConsoleCommand("fm_halt", "fm_halt - stop all replays")]
     public void CmdHalt(CCSPlayerController? caller, CommandInfo cmd) => cmd.ReplyToCommand("[FM] " + Halt());

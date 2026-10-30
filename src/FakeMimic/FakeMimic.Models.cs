@@ -4,6 +4,7 @@
 // src/list_models.py after a CS2 update adds agents. All of them are precached on map load so a bot
 // can switch to any of them; the choice is stored in the recording's .fme (model=...).
 using CounterStrikeSharp.API.Core;
+using FakeMimicApi;
 
 namespace FakeMimic;
 
@@ -95,23 +96,36 @@ public partial class FakeMimic
     void AssignWithModel(CCSPlayerController p, string name, string team, string model)
     {
         SetModel(name, model);
-        Assign(name, team, s => { Say(p, $"{s}, model: {ModelName(model)}"); RecordingsMenu(p); });
+        // the bot joins half a second later: the list stays open and shows the bot when it is there
+        RecordingsMenu(p);
+        Assign(name, team, s => { Say(p, $"{s}, model: {ModelName(model)}"); Reshow(p, RecordingsTitle, RecordingsMenu); });
     }
 
-    void FactionsMenu(CCSPlayerController p, string name, string team, int page = 0)
+    // portraits, four to a row (rows without a heading); a click picks
+    static List<MenuItem> CardRows(IList<(ApiCard Card, Action<CCSPlayerController> Pick)> cards) =>
+        cards.Chunk(RowCards).Select(row => new MenuItem("", _ => { })
+        {
+            Kind = ApiRowKind.Cards, Selected = -1, Cards = row.Select(c => c.Card).ToList(),
+            Choose = (pl, i) => row[i].Pick(pl),
+        }).Take(8).ToList();
+
+    void FactionsMenu(CCSPlayerController p, string name, string team)
     {
-        var entries = new List<MenuItem> { new("Default team model", pl => AssignWithModel(pl, name, team, "")) };
-        entries.AddRange(_models.Select(FactionOf).Distinct().Where(f => FactionFits(f, team))
-            .Select(f => new MenuItem(FactionName(f), pl => VariantsMenu(pl, name, team, f))));
-        ShowPaged(p, $"{(team == "t" ? "T" : "CT")} model for '{name}'", entries, page,
-            (pl, pg) => FactionsMenu(pl, name, team, pg), pl => PlayOnBotMenu(pl, name));
+        var teamNum = team == "t" ? 2 : 3;
+        var cards = new List<(ApiCard, Action<CCSPlayerController>)> { (new ApiCard(DefaultPortrait, teamNum, "Default", "map's own"), pl => AssignWithModel(pl, name, team, "")) };
+        foreach (var f in _models.Select(FactionOf).Distinct().Where(f => FactionFits(f, team)))
+        {
+            var variants = _models.Where(m => FactionOf(m) == f).ToList();
+            cards.Add((new ApiCard(variants[0], teamNum, FactionName(f), $"{variants.Count} variants"), pl => VariantsMenu(pl, name, team, f)));
+        }
+        Show(p, new Menu($"{(team == "t" ? "T" : "CT")} model for '{name}'", CardRows(cards), Back: pl => PlayOnBotMenu(pl, name)));
     }
 
-    void VariantsMenu(CCSPlayerController p, string name, string team, string faction, int page = 0)
+    void VariantsMenu(CCSPlayerController p, string name, string team, string faction)
     {
-        var entries = _models.Where(m => FactionOf(m) == faction)
-            .Select(m => new MenuItem(ModelName(m), pl => AssignWithModel(pl, name, team, m))).ToList();
-        ShowPaged(p, FactionName(faction), entries, page,
-            (pl, pg) => VariantsMenu(pl, name, team, faction, pg), pl => FactionsMenu(pl, name, team));
+        var teamNum = team == "t" ? 2 : 3;
+        var cards = _models.Where(m => FactionOf(m) == faction)
+            .Select(m => (new ApiCard(m, teamNum, ModelName(m), ""), (Action<CCSPlayerController>)(pl => AssignWithModel(pl, name, team, m)))).ToList();
+        Show(p, new Menu(FactionName(faction), CardRows(cards), Back: pl => FactionsMenu(pl, name, team)));
     }
 }

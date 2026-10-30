@@ -259,6 +259,8 @@ public partial class FakeMimic
             pawn.CommitSuicide(false, true);
         else if (r.Bot != null)
             _bc?.Lock(r.Bot.Slot, LockKind.All);
+        // the last one of a single pass: an open main menu shows Off again
+        if (!_looping && !_starting && !_replays.Any(x => x.Running) && LocalHuman() is { } p) Reshow(p, "FakeMimic", MainMenu);
     }
 
     // A bot that plays a recording stays dead when killed: only Go() brings it back.
