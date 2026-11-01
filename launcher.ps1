@@ -362,8 +362,8 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
               <DockPanel>
                 <CheckBox x:Name="SwDirector" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
                 <StackPanel>
-                  <TextBlock Style="{StaticResource Label}" Text="Журнал дублей"/>
-                  <TextBlock Style="{StaticResource Hint}" Text="Takes в меню H: оценки, превью, просмотр"/>
+                  <TextBlock Style="{StaticResource Label}" Text="Журнал демок"/>
+                  <TextBlock Style="{StaticResource Hint}" Text="Demos в меню H: оценки, превью, просмотр"/>
                 </StackPanel>
               </DockPanel>
               <DockPanel Margin="0,12,0,0">
@@ -392,11 +392,11 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           </DockPanel>
         </Border>
 
-        <Border x:Name="TakesCard" Style="{StaticResource ClickCard}" Padding="12,10" ToolTip="Все дубли: смотреть, оценивать, удалять">
+        <Border x:Name="TakesCard" Style="{StaticResource ClickCard}" Padding="12,10" ToolTip="Все демки: смотреть, оценивать, переименовывать, удалять">
           <DockPanel>
             <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
             <StackPanel VerticalAlignment="Center">
-              <TextBlock Style="{StaticResource Label}" Text="Дубли"/>
+              <TextBlock Style="{StaticResource Label}" Text="Демки"/>
               <TextBlock x:Name="TakesHint" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
             </StackPanel>
           </DockPanel>
@@ -458,7 +458,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         </StackPanel>
         <Grid>
           <TextBox x:Name="TkSearch" Style="{StaticResource Field}"/>
-          <TextBlock x:Name="TkSearchHint" Text="&#x2315;  Дубль, карта, папка, бот, заметка" IsHitTestVisible="False" Foreground="#60FFFFFF"
+          <TextBlock x:Name="TkSearchHint" Text="&#x2315;  Демка, карта, папка, бот, заметка" IsHitTestVisible="False" Foreground="#60FFFFFF"
                      FontSize="14" Margin="12,0,0,0" VerticalAlignment="Center"/>
         </Grid>
         <ScrollViewer x:Name="TkScroll" Margin="0,10,-8,0" Height="430" VerticalScrollBarVisibility="Auto" Focusable="False">
@@ -469,6 +469,20 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         <DockPanel Margin="-6,8,-6,0">
           <TextBlock x:Name="TkTotal" DockPanel.Dock="Right" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,6,0"/>
           <Button x:Name="BtnTkBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
+        </DockPanel>
+      </StackPanel>
+
+      <!-- ===== keys: one key per fake-mode action ===== -->
+      <StackPanel x:Name="Keys" Visibility="Collapsed">
+        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="2,-6,0,8"
+                   Text="Нажми на клавишу действия, потом нужную клавишу. Правая кнопка мыши — без клавиши. Работает с следующего запуска через «Играть»; в обычной игре твои бинды возвращаются сами."/>
+        <ScrollViewer x:Name="KyScroll" Height="480" VerticalScrollBarVisibility="Auto" Focusable="False" Margin="0,0,-8,0">
+          <StackPanel x:Name="KyList" Margin="0,0,8,0"/>
+        </ScrollViewer>
+        <TextBlock x:Name="KyMsg" Style="{StaticResource Hint}" Margin="2,6,0,0" TextWrapping="Wrap"/>
+        <DockPanel Margin="-6,6,-6,0">
+          <Button x:Name="BtnKyReset" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Всё по умолчанию"/>
+          <Button x:Name="BtnKyBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
         </DockPanel>
       </StackPanel>
 
@@ -508,6 +522,16 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           <TextBox x:Name="TbPass" Grid.Column="2" Style="{StaticResource Field}"/>
         </Grid>
         <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="для HLAE-инструментов; порт 0 = выключено"/>
+
+        <Border x:Name="KeysCard" Style="{StaticResource ClickCard}" Margin="0,12,0,0" Padding="12,10">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Label}" Text="Клавиши fake-режима"/>
+              <TextBlock x:Name="KeysHint" Style="{StaticResource Hint}"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
 
         <Button x:Name="BtnShortcut" Margin="-6,10,0,0" HorizontalAlignment="Left" Style="{StaticResource Link}" Content="Ярлык FakeDemo на рабочий стол"/>
         <DockPanel Margin="-6,4,-6,0">
@@ -622,7 +646,7 @@ function Update-Summary {
   Update-MapCard
 }
 
-$Screens = [ordered]@{ "main" = @("Main", "Fake demo"); "settings" = @("Settings", "Настройки"); "picker" = @("Picker", "Карта"); "takes" = @("Takes", "Дубли") }
+$Screens = [ordered]@{ "main" = @("Main", "Fake demo"); "settings" = @("Settings", "Настройки"); "picker" = @("Picker", "Карта"); "takes" = @("Takes", "Демки"); "binds" = @("Keys", "Клавиши") }   # not "keys": that name would hide $Screens.Keys
 
 function Show-Screen([string]$name) {
   foreach ($k in $Screens.Keys) { (El $Screens[$k][0]).Visibility = $(if ($k -eq $name) { "Visible" } else { "Collapsed" }) }
@@ -631,6 +655,8 @@ function Show-Screen([string]$name) {
   if ($name -eq "picker") { Animate-In (Pick-List) 25 8 }
   if ($name -eq "takes") { Animate-In (El "TkList") 25 8 }
   if ($name -eq "main") { Update-TakesCard }
+  if ($name -eq "settings") { Update-KeysCard }
+  if ($name -eq "binds") { Animate-In (El "KyList") 25 8 }
 }
 
 function Screen { foreach ($k in $Screens.Keys) { if ((El $Screens[$k][0]).Visibility -eq "Visible") { return $k } } }
@@ -820,13 +846,13 @@ function Size-Text([long]$b) { if ($b -lt 1MB) { "{0:0} КБ" -f ($b / 1KB) } el
 
 function Takes-Word([int]$n) {
   $m = $n % 100; $k = $n % 10
-  if ($m -ge 11 -and $m -le 14) { "дублей" } elseif ($k -eq 1) { "дубль" } elseif ($k -ge 2 -and $k -le 4) { "дубля" } else { "дублей" }
+  if ($m -ge 11 -and $m -le 14) { "демок" } elseif ($k -eq 1) { "демка" } elseif ($k -ge 2 -and $k -le 4) { "демки" } else { "демок" }
 }
 
 function Update-TakesCard {
   $t = @(try { Load-Takes } catch { })
   $best = $t | Sort-Object { $_.Rec.Stars }, When -Descending | Select-Object -First 1
-  (El "TakesHint").Text = if (-not $t) { "пока нет: H › Start take в игре" }
+  (El "TakesHint").Text = if (-not $t) { "пока нет: H › Record demo в игре" }
     else { "$($t.Count) $(Takes-Word $t.Count) · $(Size-Text (($t | Measure-Object Size -Sum).Sum))$(if ($best.Rec.Stars) { " · лучший $('★' * $best.Rec.Stars) $($best.Rec.Demo)" })" }
 }
 
@@ -855,7 +881,7 @@ function Fill-Takes {
   foreach ($t in $list) { [void]$panel.Children.Add((New-TakeItem $t)) }
   (El "TkScroll").ScrollToTop()
   $e = El "TkEmpty"
-  $e.Text = if (-not $script:takes) { "Дублей пока нет. В игре: H › Start take, потом Stop take или DEL — дубль появится здесь." }
+  $e.Text = if (-not $script:takes) { "Демок пока нет. В игре: H › Record demo, потом Stop demo или DEL — демка появится здесь." }
             elseif (-not $list) { "Ничего не найдено" } else { "" }
   $e.Visibility = $(if ($e.Text) { "Visible" } else { "Collapsed" })
   $all = @($script:takes)
@@ -889,7 +915,7 @@ function New-TakeItem($t) {
   # handlers get the take from Tag: a GetNewClosure block would not see this script's functions
   $watch = Tool-Button ([string][char]0xE768) "Смотреть"; $watch.IsEnabled = $t.Exists
   $show = Tool-Button ([string][char]0xE838) "Показать в папке"; $show.IsEnabled = $t.Exists
-  $del = Tool-Button ([string][char]0xE74D) "Удалить дубль (в корзину)"
+  $del = Tool-Button ([string][char]0xE74D) "Удалить демку (в корзину)"
   foreach ($b in $watch, $show, $del) { $b.Tag = $t; [void]$tools.Children.Add($b) }
   $watch.Add_Click({ param($sender) try { Watch-Take $sender.Tag } catch { Show-Error $_.Exception.Message } })
   $show.Add_Click({ param($sender) Start-Process explorer.exe "/select,`"$($sender.Tag.File)`"" })
@@ -914,8 +940,22 @@ function New-TakeItem($t) {
   }
   $name = New-Object Windows.Controls.TextBlock
   $name.Text = $r.Demo; $name.Foreground = "White"; $name.FontSize = 14; $name.FontWeight = "SemiBold"; $name.Margin = "8,1,0,0"
-  $name.TextTrimming = "CharacterEllipsis"
-  [void]$head.Children.Add($name)
+  $name.TextTrimming = "CharacterEllipsis"; $name.Cursor = "IBeam"; $name.ToolTip = "Переименовать"
+  # the name: click to rename, Enter or leaving the field renames the .dem too
+  $nameEdit = New-Object Windows.Controls.TextBox
+  $nameEdit.Style = $win.Resources["Field"]; $nameEdit.Visibility = "Collapsed"; $nameEdit.Margin = "8,0,0,0"; $nameEdit.MinWidth = 180
+  $name.Tag = @{ Take = $t; Edit = $nameEdit }; $nameEdit.Tag = @{ Take = $t; Name = $name }
+  $name.Add_MouseLeftButtonDown({ param($sender, $e)
+    $e.Handled = $true
+    $ed = $sender.Tag.Edit
+    $ed.Text = $sender.Tag.Take.Rec.Demo; $sender.Visibility = "Collapsed"; $ed.Visibility = "Visible"; $ed.Focus() | Out-Null; $ed.SelectAll()
+  })
+  $nameEdit.Add_LostFocus({ param($sender)
+    $nm = $sender.Tag.Name
+    $sender.Visibility = "Collapsed"; $nm.Visibility = "Visible"
+    try { Rename-Take $sender.Tag.Take $sender.Text.Trim(); $nm.Text = $sender.Tag.Take.Rec.Demo } catch { Show-Error $_.Exception.Message }
+  })
+  [void]$head.Children.Add($name); [void]$head.Children.Add($nameEdit)
   [void]$info.Children.Add($head)
 
   [void]$info.Children.Add((Text-Line "$($t.Map) / $($t.Folder) · $($t.When.ToString('dd.MM HH:mm'))" "#90FFFFFF" 12))
@@ -965,7 +1005,7 @@ function Watch-Take($t) {
   $demo = $t.Rec.Demo
   if (Cs2-Running) {
     $nc = Game-Netcon
-    if (-not $nc) { Show-Error "CS2 запущена без консоли netcon: открой дубль в игре (H › Takes › Watch) или закрой CS2"; return }
+    if (-not $nc) { Show-Error "CS2 запущена без консоли netcon: открой демку в игре (H › Demos › Watch) или закрой CS2"; return }
     $c = New-Object Net.Sockets.TcpClient
     try {
       $c.Connect("127.0.0.1", $nc.Port)
@@ -982,14 +1022,146 @@ function Watch-Take($t) {
   Show-Info "Запускаю CS2 с демкой $demo…"
 }
 
+# names as in the game: latin letters, digits, _ and - (the demo is played by this name)
+function Rename-Take($t, [string]$name) {
+  $old = $t.Rec.Demo
+  if (-not $name -or $name -eq $old) { return }
+  if ($name -notmatch '^[A-Za-z0-9_-]+$') { throw "Имя демки — только латиница, цифры, _ и -" }
+  if (@($script:takes | Where-Object { $_.Rec.Demo -eq $name }).Count) { throw "Демка $name уже есть" }
+  if ($t.Exists) {
+    $to = [IO.Path]::Combine([IO.Path]::GetDirectoryName($t.File), "$name.dem")
+    if (Test-Path $to) { throw "Файл $name.dem уже есть в папке игры" }
+    Move-Item -LiteralPath $t.File -Destination $to -ErrorAction Stop
+    $t.File = $to
+  }
+  $t.Rec.Demo = $name
+  Save-TakeLog $t.Json
+  Show-Info "$old → $name"
+}
+
 function Delete-Take($t) {
-  $what = if ($t.Exists) { "Удалить $($t.Rec.Demo).dem ($(Size-Text $t.Size)) в корзину и убрать дубль из списка?" } else { "Убрать $($t.Rec.Demo) из списка? Файла уже нет." }
-  if ([Windows.MessageBox]::Show($win, $what, "Удалить дубль", "YesNo", "Question") -ne "Yes") { return }
+  $what = if ($t.Exists) { "Удалить $($t.Rec.Demo).dem ($(Size-Text $t.Size)) в корзину и убрать из списка?" } else { "Убрать $($t.Rec.Demo) из списка? Файла уже нет." }
+  if ([Windows.MessageBox]::Show($win, $what, "Удалить демку", "YesNo", "Question") -ne "Yes") { return }
   if ($t.Exists) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($t.File, "OnlyErrorDialogs", "SendToRecycleBin") }
   $script:takes = @($script:takes | Where-Object { $_ -ne $t })
   Save-TakeLog $t.Json
   Fill-Takes
-  Show-Info "$($t.Rec.Demo) удалён$(if ($t.Exists) { ' в корзину' })"
+  Show-Info "$($t.Rec.Demo) удалена$(if ($t.Exists) { ' в корзину' })"
+}
+
+# ---------------- keys ----------------
+
+# a WPF key -> the name CS2 binds it by; $null = not a key for this
+function Cs2-KeyName([string]$k) {
+  if ($k -match '^[A-Z]$') { return $k.ToLower() }
+  if ($k -match '^D(\d)$') { return $Matches[1] }
+  if ($k -match '^F([1-9]|1[0-2])$') { return $k }
+  $map = @{ Return = "ENTER"; Back = "BACKSPACE"; Delete = "DEL"; Insert = "INS"; Home = "HOME"; End = "END"; PageUp = "PGUP"; Prior = "PGUP"
+    Next = "PGDN"; PageDown = "PGDN"; Tab = "TAB"; Space = "SPACE"; Left = "LEFTARROW"; Right = "RIGHTARROW"; Up = "UPARROW"; Down = "DOWNARROW"
+    LeftShift = "SHIFT"; RightShift = "RSHIFT"; LeftCtrl = "CTRL"; RightCtrl = "RCTRL"; LeftAlt = "ALT"; RightAlt = "RALT"
+    CapsLock = "CAPSLOCK"; Capital = "CAPSLOCK"; Pause = "PAUSE"; OemComma = ","; OemPeriod = "."; OemMinus = "-"; OemPlus = "="
+    OemOpenBrackets = "["; Oem4 = "["; Oem6 = "]"; OemCloseBrackets = "]"; Oem1 = "SEMICOLON"; OemSemicolon = "SEMICOLON"
+    Oem7 = "'"; OemQuotes = "'"; Oem2 = "/"; OemQuestion = "/"; Oem5 = "\"; OemPipe = "\" }
+  $map[$k]
+}
+
+function Key-Label([string]$k) {
+  if (-not $k) { return "—" }
+  if ($k -match '^MOUSE(\d)$') { return "Мышь $($Matches[1])" }
+  if ($k.Length -eq 1) { return $k.ToUpper() }
+  $k
+}
+
+# the player's own binds (the clean copy the launcher keeps), to show what a key does in a normal game
+function Own-Binds {
+  $own = @{}
+  try {
+    $acc = Pick-Account $script:s
+    $snap = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
+    $src = if (Test-Path $snap) { $snap } else { $acc.Keys }
+    foreach ($l in Get-Content $src) {
+      $m = [regex]::Match($l, '^\s*"([^"]+)"\s+"([^"]*)"\s*$')
+      if ($m.Success -and $m.Groups[2].Value -and $m.Groups[2].Value -ne "<unbound>" -and $m.Groups[2].Value -notmatch '(fd_|fm_|fw_)') { $own[$m.Groups[1].Value.ToUpper()] = $m.Groups[2].Value }
+    }
+  } catch { }
+  $own
+}
+
+function Update-KeysCard {
+  $b = @(Key-Binds)
+  $changed = @($b | Where-Object { $x = $_; $x.Key -ne ($KeyActions | Where-Object { $_.Cmd -eq $x.Cmd }).Key }).Count
+  (El "KeysHint").Text = "$($b.Count) действий: меню, запись, боты, Wallhack…$(if ($changed) { " · изменено: $changed" })"
+}
+
+function Open-Keys {
+  $script:binds = @(Key-Binds)
+  $script:own = Own-Binds
+  $script:capture = $null
+  (El "KyMsg").Text = ""
+  Fill-Keys
+  (El "KyScroll").ScrollToTop()
+  Show-Screen "binds"
+}
+
+function Fill-Keys {
+  $panel = El "KyList"; $panel.Children.Clear()
+  $group = ""
+  foreach ($b in $script:binds) {
+    if ($b.Group -ne $group) {
+      $group = $b.Group
+      $cap = New-Object Windows.Controls.TextBlock
+      $cap.Style = $win.Resources["Caption"]; $cap.Text = $group
+      if ($panel.Children.Count -eq 0) { $cap.Margin = "2,0,0,6" }
+      [void]$panel.Children.Add($cap)
+    }
+    $def = ($KeyActions | Where-Object { $_.Cmd -eq $b.Cmd }).Key
+    $row = New-Object Windows.Controls.DockPanel; $row.Margin = "0,0,0,6"
+    $key = New-Object Windows.Controls.Button
+    $key.Style = $win.Resources["Small"]; $key.Content = Key-Label $b.Key; $key.MinWidth = 96; $key.Tag = $b
+    $key.ToolTip = "Нажми и потом клавишу; правая кнопка — без клавиши"
+    if ($b.Key -ne $def) { $key.Foreground = $gold }
+    $key.Add_Click({ param($sender) Start-KeyCapture $sender })
+    $key.Add_MouseRightButtonUp({ param($sender, $e) $e.Handled = $true; Set-Key $sender.Tag "" })
+    [Windows.Controls.DockPanel]::SetDock($key, "Right")
+    $reset = Tool-Button ([string][char]0xE72C) "Вернуть $(Key-Label $def)"
+    $reset.Tag = $b; $reset.Margin = "0,0,6,0"; $reset.VerticalAlignment = "Center"
+    $reset.Visibility = $(if ($b.Key -ne $def) { "Visible" } else { "Hidden" })
+    $reset.Add_Click({ param($sender) $x = $sender.Tag; Set-Key $x ($KeyActions | Where-Object { $_.Cmd -eq $x.Cmd }).Key })
+    [Windows.Controls.DockPanel]::SetDock($reset, "Right")
+    [void]$row.Children.Add($key); [void]$row.Children.Add($reset)
+    $text = New-Object Windows.Controls.StackPanel; $text.VerticalAlignment = "Center"
+    $t1 = New-Object Windows.Controls.TextBlock
+    $t1.Text = $b.Text; $t1.Foreground = "White"; $t1.FontSize = 14; $t1.TextTrimming = "CharacterEllipsis"
+    [void]$text.Children.Add($t1)
+    $own = if ($b.Key) { $script:own[$b.Key.ToUpper()] }
+    if ($own) { [void]$text.Children.Add((Text-Line "в обычной игре: $own" "#60FFFFFF" 11)) }
+    [void]$row.Children.Add($text)
+    [void]$panel.Children.Add($row)
+  }
+}
+
+function Start-KeyCapture($button) {
+  if ($script:capture) { $script:capture.Content = Key-Label $script:capture.Tag.Key }
+  $script:capture = $button
+  $button.Content = "нажми…"
+  (El "KyMsg").Text = "Нажми клавишу или кнопку мыши (средняя, боковые). Esc — отмена."
+}
+
+function Set-Key($b, [string]$key) {
+  $script:capture = $null
+  if ($key -match '^[1-9]$') { (El "KyMsg").Text = "1–9 выбирают пункты меню H: возьми другую клавишу"; Fill-Keys; return }
+  $msg = if ($key) { "$($b.Text): $(Key-Label $key)" } else { "$($b.Text): без клавиши" }
+  foreach ($o in $script:binds | Where-Object { $key -and $_.Key -eq $key -and $_.Cmd -ne $b.Cmd }) {
+    $o.Key = ""
+    $msg += ". Снята с «$($o.Text)»"
+  }
+  $b.Key = $key
+  Save-KeyBinds $script:binds
+  if (Cs2-Running) { $msg += ". В игре — после следующего «Играть»" }
+  (El "KyMsg").Text = $msg
+  $off = (El "KyScroll").VerticalOffset
+  Fill-Keys
+  (El "KyScroll").ScrollToVerticalOffset($off)
 }
 
 # ---------------- actions ----------------
@@ -1120,6 +1292,21 @@ function Refresh {
 (El "BtnBack").Add_Click({ Show-Screen "main" })
 (El "TakesCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Takes } catch { Show-Error $_.Exception.Message } })
 (El "BtnTkBack").Add_Click({ Show-Screen "main" })
+(El "KeysCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Keys } catch { Show-Error $_.Exception.Message } })
+(El "BtnKyBack").Add_Click({ $script:capture = $null; Show-Screen "settings" })
+(El "BtnKyReset").Add_Click({
+  if ([Windows.MessageBox]::Show($win, "Вернуть все клавиши fake-режима по умолчанию?", "Клавиши", "YesNo", "Question") -ne "Yes") { return }
+  if (Test-Path $KeysFile) { Remove-Item $KeysFile }
+  $script:binds = @(Key-Binds); $script:capture = $null
+  Fill-Keys
+  (El "KyMsg").Text = "Все клавиши по умолчанию"
+})
+# the middle and side mouse buttons can be keys too
+$win.Add_PreviewMouseDown({ param($sender, $e)
+  if (-not $script:capture) { return }
+  $m = switch ("$($e.ChangedButton)") { "Middle" { "MOUSE3" } "XButton1" { "MOUSE4" } "XButton2" { "MOUSE5" } default { $null } }
+  if ($m) { $e.Handled = $true; Set-Key $script:capture.Tag $m }
+})
 (El "TkSearch").Add_TextChanged({ Fill-Takes })
 foreach ($n in "TkNew", "TkStars", "TkAll", "TkTop", "TkNone", "TkGone") {
   (El $n).Add_Checked({ if (-not $script:loading) { Fill-Takes; Animate-In (El "TkList") 25 8 } })
@@ -1139,13 +1326,52 @@ foreach ($n in "TkNew", "TkStars", "TkAll", "TkTop", "TkNone", "TkGone") {
     $sc.WorkingDirectory = $here; $sc.Description = "FakeDemo for CS2"; $sc.Save()
     Show-Screen "main"; Show-Info "Ярлык FakeDemo на рабочем столе"
   } catch { Show-Error $_.Exception.Message } })
+# the Explorer-style folder dialog (IFileDialog with FOS_PICKFOLDERS) instead of the old tree of FolderBrowserDialog
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class FolderPicker {
+  [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")] class FileOpenDialog { }
+  [ComImport, Guid("42F85136-DB7E-439C-85F1-E4075D135FC8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IFileDialog {
+    [PreserveSig] int Show(IntPtr owner);
+    void SetFileTypes(); void SetFileTypeIndex(); void GetFileTypeIndex(); void Advise(); void Unadvise();
+    void SetOptions(uint fos); void GetOptions(out uint fos);
+    void SetDefaultFolder(IShellItem si); void SetFolder(IShellItem si);
+    void GetFolder(); void GetCurrentSelection();
+    void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name); void GetFileName();
+    void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+    void SetOkButtonLabel(); void SetFileNameLabel();
+    void GetResult(out IShellItem si);
+  }
+  [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IShellItem {
+    void BindToHandler(); void GetParent();
+    void GetDisplayName(uint sigdn, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+  }
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+  static extern void SHCreateItemFromParsingName(string path, IntPtr bc, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IShellItem si);
+
+  public static string Pick(IntPtr owner, string title, string start) {
+    var d = (IFileDialog)new FileOpenDialog();
+    d.SetOptions(0x20 | 0x40 | 0x800);   // pick folders, file system only, path must exist
+    d.SetTitle(title);
+    if (!string.IsNullOrEmpty(start) && System.IO.Directory.Exists(start)) {
+      try { IShellItem si; SHCreateItemFromParsingName(start, IntPtr.Zero, typeof(IShellItem).GUID, out si); d.SetFolder(si); } catch { }
+    }
+    if (d.Show(owner) != 0) return null;
+    IShellItem r; d.GetResult(out r);
+    string path; r.GetDisplayName(0x80058000, out path);   // SIGDN_FILESYSPATH
+    return path;
+  }
+}
+'@
 (El "BtnBrowse").Add_Click({
-  $d = New-Object System.Windows.Forms.FolderBrowserDialog
-  $d.Description = "Папка Counter-Strike Global Offensive"
-  $d.SelectedPath = $script:s.Cs2Path
-  if ($d.ShowDialog() -ne "OK") { return }
-  if (-not (Test-Path (Join-Path $d.SelectedPath "game\csgo\gameinfo.gi"))) { Show-Error "Это не папка CS2: нет game\csgo\gameinfo.gi"; return }
-  $script:s.Cs2Path = $d.SelectedPath; (El "TbCs2").Text = $d.SelectedPath; Save; Refresh
+  $owner = (New-Object Windows.Interop.WindowInteropHelper $win).Handle
+  $path = [FolderPicker]::Pick($owner, "Папка Counter-Strike Global Offensive", $script:s.Cs2Path)
+  if (-not $path) { return }
+  if (-not (Test-Path ([IO.Path]::Combine($path, "game\csgo\gameinfo.gi")))) { Show-Error "Это не папка CS2: нет game\csgo\gameinfo.gi"; return }
+  $script:s.Cs2Path = $path; (El "TbCs2").Text = $path; Save; Refresh
 })
 
 (El "SwPlugins").Add_Click({ $script:s.Plugins = [bool](El "SwPlugins").IsChecked; Save; Update-Summary })
@@ -1166,6 +1392,15 @@ foreach ($n in "TkNew", "TkStars", "TkAll", "TkTop", "TkNone", "TkGone") {
 # Enter = Play, Esc = back / close
 $win.Add_PreviewKeyDown({
   param($sender, $e)
+  # a key screen row waits for its key: every key goes there (Alt comes as System)
+  if ($script:capture) {
+    $e.Handled = $true
+    $k = if ($e.Key -eq "System") { "$($e.SystemKey)" } else { "$($e.Key)" }
+    if ($k -eq "Escape") { $script:capture.Content = Key-Label $script:capture.Tag.Key; $script:capture = $null; (El "KyMsg").Text = ""; return }
+    $name = Cs2-KeyName $k
+    if ($name) { Set-Key $script:capture.Tag $name } else { (El "KyMsg").Text = "Эту клавишу игра не привязывает: выбери другую (Esc — отмена)" }
+    return
+  }
   if ($e.OriginalSource -eq (El "TbSearch")) {
     # Enter takes the first map found, Esc clears the search, then leaves
     if ($e.Key -eq "Enter") {
@@ -1230,6 +1465,7 @@ Refresh
 if (-not $script:s.Cs2Path) { Show-Screen "settings" }
 elseif ($env:FAKEDEMO_SCREEN -eq "picker") { Open-Picker }
 elseif ($env:FAKEDEMO_SCREEN -eq "takes") { Open-Takes }
+elseif ($env:FAKEDEMO_SCREEN -eq "binds") { Open-Keys }
 elseif ($env:FAKEDEMO_SCREEN) { Show-Screen $env:FAKEDEMO_SCREEN }
 else { Show-Screen "main" }
 

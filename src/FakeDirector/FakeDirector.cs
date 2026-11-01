@@ -1,7 +1,7 @@
 // FakeDirector - take log for FakeMimic (separate add-on plugin).
 // Every take FakeMimic records (bots + tv_record) is written to Documents/FakeDemo/takes/<map>/<folder>/takes.json:
 // demo name, when, how long, which recordings, bots and models played, a verdict and a note.
-// FakeMimic's main menu gets "Takes ›": the takes of a folder (filter by verdict), and a card per take with the
+// FakeMimic's main menu gets "Demos ›": the takes of a folder (filter by verdict), and a card per take with the
 // bots' portraits, Watch, the verdict, a preview on the map (glowing bots at their starts + their routes,
 // only for the player, never in a demo), a jump to a bot's start, a note, Show in folder and Delete.
 // Talks to FakeMimic only through FakeMimicApi ("fakemimic:api").
@@ -72,8 +72,9 @@ public class FakeDirector : BasePlugin
         if (_fm.Version != IFakeMimicApi.CurrentVersion)
             Logger.LogWarning("FakeMimic API {Have}, FakeDirector was built for {Want}: install matching versions", _fm.Version, IFakeMimicApi.CurrentVersion);
         _fm.TakeStarted += _ => ClearPreview();
+        _fm.BotsStarted += ClearPreview;   // the player's own start: the preview's routes would not match
         _fm.TakeStopped += OnTakeStopped;
-        _fm.AddMainMenuItem(() => new ApiMenuItem("Takes ›", p => { _folder = null; TakesMenu(p); }) { Value = Load(LogPath(Server.MapName, _fm.Folder)).Count.ToString() });
+        _fm.AddMainMenuItem(() => new ApiMenuItem("Demos ›", p => { _folder = null; TakesMenu(p); }) { Value = Load(LogPath(Server.MapName, _fm.Folder)).Count.ToString() });
     }
 
     public override void Unload(bool hotReload) => ClearPreview();
@@ -187,9 +188,9 @@ public class FakeDirector : BasePlugin
                 Value = $"{t.Seconds:0.0} s", Tone = Tone(t), Faded = DemoFile(t.Demo) == null,
             });
         if (takes.Count == 0)
-            items.Add(new("No takes here yet: Start take on the main screen", _ => { }) { Kind = ApiRowKind.Info });
+            items.Add(new("No demos here yet: Record demo on the main screen", _ => { }) { Kind = ApiRowKind.Info });
         if (pages > 1) items.Add(new($"More ({page + 1}/{pages})", pl => TakesMenu(pl, (page + 1) % pages)));
-        _fm.ShowMenu(p, "Takes", items, pl => _fm.OpenMainMenu(pl));
+        _fm.ShowMenu(p, "Demos", items, pl => _fm.OpenMainMenu(pl));
     }
 
     void FoldersMenu(CCSPlayerController p, int page = 0)
@@ -204,7 +205,7 @@ public class FakeDirector : BasePlugin
             Value = Load(LogPath(Server.MapName, f)).Count.ToString(), On = f == Folder,
         }).ToList();
         if (pages > 1) items.Add(new($"More ({page + 1}/{pages})", pl => FoldersMenu(pl, (page + 1) % pages)));
-        _fm.ShowMenu(p, $"Takes on {Server.MapName}", items, pl => TakesMenu(pl));
+        _fm.ShowMenu(p, $"Demos on {Server.MapName}", items, pl => TakesMenu(pl));
     }
 
     // ---------------- one take ----------------
@@ -253,7 +254,7 @@ public class FakeDirector : BasePlugin
                 else _fm.Say(pl, "pick a bot in the row above first");
                 TakeMenu(pl, demo);
             }) { Faded = picked == null, Value = picked?.BotName ?? "pick a bot" },
-            new(t.Note.Length > 0 ? $"Note: {t.Note}" : "Add a note", pl => _fm.Ask(pl, "note for this take", (pl2, text) =>
+            new(t.Note.Length > 0 ? $"Note: {t.Note}" : "Add a note", pl => _fm.Ask(pl, "note for this demo", (pl2, text) =>
             {
                 var all = Load(path);
                 var x = all.FirstOrDefault(y => y.Demo == demo);
@@ -295,6 +296,9 @@ public class FakeDirector : BasePlugin
         {
             try
             {
+                // the menu closes after this row ran: sent at once, the game left the map before it got
+                // the closing and the menu stayed over the demo
+                Thread.Sleep(300);
                 using var c = new System.Net.Sockets.TcpClient("127.0.0.1", port);
                 var s = c.GetStream();
                 var text = System.Text.Encoding.UTF8.GetBytes((pass != null ? $"PASS {pass}\n" : "") + $"playdemo {demo}\n");
@@ -303,6 +307,18 @@ public class FakeDirector : BasePlugin
             }
             catch (Exception e) { Logger.LogWarning("playdemo over netcon failed: {Message}", e.Message); }
         });
+    }
+
+    [CounterStrikeSharp.API.Core.Attributes.Registration.ConsoleCommand("fd_watchlast", "fd_watchlast - watch the newest demo of the current folder")]
+    public void CmdWatchLast(CCSPlayerController? caller, CounterStrikeSharp.API.Modules.Commands.CommandInfo cmd)
+    {
+        var p = caller ?? Utilities.GetPlayers().FirstOrDefault(x => x is { IsValid: true, IsBot: false, IsHLTV: false });
+        if (p == null) return;
+        var last = Load(CurrentLog).Where(t => DemoFile(t.Demo) != null).MaxBy(t => t.Started);
+        if (last == null) { _fm?.Say(p, $"no demos in {Folder} yet"); return; }
+        ClearPreview();
+        p.PrintToCenter($"Watch {last.Demo}");
+        Watch(p, last.Demo);
     }
 
     void FilesMenu(CCSPlayerController p, string demo)
@@ -318,8 +334,34 @@ public class FakeDirector : BasePlugin
                 else _fm.Say(pl, "the demo file is gone");
                 FilesMenu(pl, demo);
             }) { Faded = file == null },
-            new("Delete this take", pl => ConfirmDelete(pl, demo), Accent: true) { Divider = true },
+            new("Rename", pl => _fm.Ask(pl, "new name of the demo", (pl2, text) =>
+            {
+                _fm.Say(pl2, Rename(demo, text, out var now));
+                TakeMenu(pl2, now);
+            })) { Value = "chat" },
+            new("Delete this demo", pl => ConfirmDelete(pl, demo), Accent: true) { Divider = true },
         }, pl => TakeMenu(pl, demo));
+    }
+
+    // the .dem file and its entry; names as FakeMimic's: latin letters, digits, _ and -
+    string Rename(string demo, string text, out string now)
+    {
+        now = demo;
+        var name = new string(text.Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').ToArray());
+        if (name.Length == 0) return "a name of latin letters, digits, _ or -";
+        var path = CurrentLog;
+        var takes = Load(path);
+        if (takes.Any(t => t.Demo == name) || DemoFile(name) != null) return $"'{name}' already exists";
+        var t = takes.FirstOrDefault(x => x.Demo == demo);
+        if (t == null) return $"no demo '{demo}'";
+        var file = DemoFile(demo);
+        try { if (file != null) File.Move(file, Path.Combine(Path.GetDirectoryName(file)!, name + ".dem")); }
+        catch (IOException e) { return $"could not rename the file: {e.Message}"; }
+        t.Demo = name;
+        Save(path, takes);
+        if (_preview == demo) _preview = name;
+        now = name;
+        return $"renamed to {name}";
     }
 
     void ConfirmDelete(CCSPlayerController p, string demo)
@@ -373,7 +415,7 @@ public class FakeDirector : BasePlugin
             Beam(route.Path[0], route.Path[0] with { Z = route.Path[0].Z + 72 }, StartPost);
         }
         _preview = t.Demo;
-        if (_fm == null || playable.Count == 0) { _fm?.Say(p, "the recordings of this take are gone"); return; }
+        if (_fm == null || playable.Count == 0) { _fm?.Say(p, "the recordings of this demo are gone"); return; }
         var demo = t.Demo;
         _fm.Say(p, _fm.PlaySetup(Folder, playable, () => _fm.Say(p, $"preview of {demo}: the bots play it in a loop, J to see them through walls"))
             + (missing > 0 ? $"; {missing} recording(s) are gone" : ""));

@@ -89,7 +89,7 @@ public interface IFakeMimicApi
     const string Capability = "fakemimic:api";
 
     /// Bumped on every change of this contract; add-ons compare it with the one they were built with.
-    const int CurrentVersion = 4;
+    const int CurrentVersion = 6;
 
     /// CurrentVersion of the FakeMimic that is loaded.
     int Version { get; }
@@ -103,6 +103,8 @@ public interface IFakeMimicApi
     /// Fired when the player starts and stops recording a movement (name of the recording).
     event Action<string>? RecordingStarted;
     event Action<string>? RecordingStopped;
+    /// Fired when the player starts the bots (Bots play, fm_go); not for PlaySetup and not for a loop's next pass.
+    event Action? BotsStarted;
 
     /// Adds an entry to FakeMimic's main menu (one per add-on; the menu holds 8 rows).
     void AddMainMenuItem(string text, Action<CCSPlayerController> pick);
@@ -118,6 +120,10 @@ public interface IFakeMimicApi
 
     /// Movements assigned to bots right now.
     IReadOnlyList<ApiReplay> Replays { get; }
+
+    /// Which tick of its movement (an index into ApiRoute.Frames) the bot in that slot plays now: 0 while it
+    /// waits at the start, the last one after the end, -1 when it plays nothing.
+    int ReplayTick(int botSlot);
 
     /// A recording of the current map as it would play now; null when it is not there any more.
     ApiRoute? Route(string folder, string recording);

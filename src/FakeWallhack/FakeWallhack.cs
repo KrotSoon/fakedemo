@@ -55,8 +55,8 @@ public class FakeWallhack : BasePlugin
     int _tick;
 
     // settings
-    bool _autoOn = true, _radar = true, _paths, _more;
-    int _who, _range, _palette;
+    bool _autoOn = true, _radar = true, _paths, _more, _progress;
+    int _who, _range, _palette, _pathColor = 1, _width = 1, _style;
 
     bool Wanted => _manual || (_autoOn && _auto > 0);
 
@@ -69,6 +69,8 @@ public class FakeWallhack : BasePlugin
             var p = File.ReadAllText(SettingsPath).Split(' ').Select(int.Parse).ToArray();
             (_autoOn, _radar, _paths, _more) = (p[0] != 0, p[1] != 0, p[2] != 0, p[3] != 0);
             (_who, _range, _palette) = (Math.Clamp(p[4], 0, 3), Math.Clamp(p[5], 0, 3), Math.Clamp(p[6], 0, 3));
+            if (p.Length < 11) return;   // older file: path settings at defaults
+            (_pathColor, _width, _style, _progress) = (Math.Clamp(p[7], 0, 1), Math.Clamp(p[8], 0, 2), Math.Clamp(p[9], 0, 2), p[10] != 0);
         }
         catch (Exception) { /* no file: defaults */ }
     }
@@ -77,18 +79,19 @@ public class FakeWallhack : BasePlugin
     {
         Directory.CreateDirectory(FakeDemoPaths.Root);
         int B(bool v) => v ? 1 : 0;
-        File.WriteAllText(SettingsPath, $"{B(_autoOn)} {B(_radar)} {B(_paths)} {B(_more)} {_who} {_range} {_palette}");
+        File.WriteAllText(SettingsPath, $"{B(_autoOn)} {B(_radar)} {B(_paths)} {B(_more)} {_who} {_range} {_palette} {_pathColor} {_width} {_style} {B(_progress)}");
     }
 
     public override void Load(bool hotReload)
     {
         LoadSettings();
         if (hotReload) AddTimer(0.5f, Hook);
-        RegisterListener<Listeners.OnMapStart>(_ => { _glows.Clear(); _beams.Clear(); _beamsKey = ""; _auto = 0; });
+        RegisterListener<Listeners.OnMapStart>(_ => { _glows.Clear(); _beams.Clear(); _drawn.Clear(); _beamsKey = ""; _auto = 0; });
         RegisterListener<Listeners.OnTick>(() =>
         {
             if (++_tick % 8 == 0) Sync();
             if (_tick % 32 == 0) SyncPaths();
+            if (_tick % 2 == 0) Progress();
             if (_tick % 2 == 0) Fade();
             Spot();
         });
@@ -144,7 +147,7 @@ public class FakeWallhack : BasePlugin
         var rows = new List<ApiMenuItem>
         {
             new("Bots through walls", pl => { Toggle(); Screen(pl); }) { Kind = ApiRowKind.BigToggle, On = _manual, Value = Wanted && !_manual ? "auto, J" : "J" },
-            new("Movement paths", pl => Set(pl, () => _paths = !_paths)) { Kind = ApiRowKind.Toggle, On = _paths, Divider = true },
+            new("Movement paths ›", PathsScreen) { Value = _paths ? "on" : "off", On = _paths, Divider = true },
             new("Who", _ => { }) { Kind = ApiRowKind.Choice, Options = WhoNames, Selected = _who, Choose = (pl, i) => Set(pl, () => _who = i) },
             // the HUD font has no ▾; opened, the settings are one block with this row as its top
             new("Settings", pl => Set(pl, () => _more = !_more)) { Value = _more ? "-" : "+", Divider = true, Nested = _more },
@@ -164,8 +167,29 @@ public class FakeWallhack : BasePlugin
         _fm.ShowMenu(p, "Wallhack", rows, pl => _fm.OpenMainMenu(pl));
     }
 
+    // the HUD localizes words that are game tokens ("Normal", "Style"), so other words are used
+    static readonly string[] PathColorNames = { "By team", "Each bot" }, WidthNames = { "Thin", "Mid", "Thick" },
+        StyleNames = { "Line", "Dashed", "Electric" };
+    static readonly float[] Widths = { 1.2f, 2.5f, 5f };
+
+    void PathsScreen(CCSPlayerController p)
+    {
+        if (_fm == null) return;
+        void Set(CCSPlayerController pl, Action change) { change(); SaveSettings(); SyncPaths(); PathsScreen(pl); }
+        var rows = new List<ApiMenuItem>
+        {
+            new("Movement paths", pl => Set(pl, () => _paths = !_paths)) { Kind = ApiRowKind.BigToggle, On = _paths },
+            new("Color", _ => { }) { Kind = ApiRowKind.Choice, Options = PathColorNames, Selected = _pathColor, Choose = (pl, i) => Set(pl, () => _pathColor = i), Divider = true },
+            new("Width", _ => { }) { Kind = ApiRowKind.Choice, Options = WidthNames, Selected = _width, Choose = (pl, i) => Set(pl, () => _width = i) },
+            new("Line look", _ => { }) { Kind = ApiRowKind.Choice, Options = StyleNames, Selected = _style, Choose = (pl, i) => Set(pl, () => _style = i) },
+            // as HLAE's campath, in the bot's own colour: bright at the bot, darker further away in time
+            new("Progress: bright at the bot", pl => Set(pl, () => _progress = !_progress)) { Kind = ApiRowKind.Toggle, On = _progress, Divider = true },
+        };
+        _fm.ShowMenu(p, "Paths", rows, Screen);
+    }
+
     string Describe() => _manual ? "bots glow through walls (J to turn off)"
-        : _autoOn ? "bots glow only while you record or a take runs" : "wallhack off";
+        : _autoOn ? "bots glow only while you record or a demo records" : "wallhack off";
 
     static CCSPlayerController? Human() =>
         Utilities.GetPlayers().FirstOrDefault(p => p is { IsValid: true, IsBot: false, IsHLTV: false });
@@ -288,9 +312,30 @@ public class FakeWallhack : BasePlugin
     }
 
     // ---------------- movement paths ----------------
-    const int MaxSegmentsPerPath = 80;
+    // The route is the bot's real position of every tick, thinned to the points where it bends by more than
+    // Tolerance units (Douglas-Peucker): curves stay where they really were, straight runs are one beam.
+    const int MaxSegmentsPerPath = 160;
+    const float Tolerance = 2f;
+    static readonly int[] BotColors = { ApiColors.Orange, ApiColors.Blue, ApiColors.Red, ApiColors.Teal, ApiColors.Yellow, ApiColors.Green, ApiColors.Violet, ApiColors.White };
+    // Progress: the path keeps the bot's colour; bright at the bot (a whitish head on the piece it is on),
+    // darker the further away in time: ahead over ProgressSpan of the movement, behind twice as fast
+    // beams add light, so a darker colour is fainter: MaxDim keeps the far part visible (35 % bright)
+    const float ProgressSpan = 0.6f, MinSpanTicks = 128, MaxDim = 0.65f;
+    const int ProgressSteps = 20;
 
-    // twice a second: redrawn only when the assignments, their edits, the filter or the colours change
+    // a drawn path: its beams with the ticks each spans, where the bot is in it
+    sealed class Drawn
+    {
+        public required ApiReplay R;
+        public required Color Color;
+        public required int Ticks;
+        public readonly List<(CBeam Beam, int From, int To)> Segments = new();
+        public readonly List<Color> Shown = new();
+    }
+
+    readonly List<Drawn> _drawn = new();
+
+    // twice a second: redrawn only when the assignments, their edits, the filter or the path settings change
     void SyncPaths()
     {
         var shown = new List<ApiReplay>();
@@ -302,45 +347,120 @@ public class FakeWallhack : BasePlugin
                 if (Utilities.GetPlayerFromSlot(r.BotSlot) is { IsValid: true } bot && Picked(bot, human, recorded) && r.Path.Count > 1)
                     shown.Add(r);
         }
-        var key = string.Join("|", shown.Select(r => $"{r.Name}:{r.BotSlot}:{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(r.Path)}")) + $"#{_palette}";
+        var key = string.Join("|", shown.Select(r => $"{r.Name}:{r.BotSlot}:{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(r.Path)}"))
+            + $"#{_palette}{_pathColor}{_width}{_style}";
         if (key == _beamsKey) return;
         _beamsKey = key;
         ClearBeams();
-        foreach (var r in shown)
+        for (var n = 0; n < shown.Count; n++)
         {
-            var color = TeamColor(r.Team);
-            var step = (r.Path.Count - 1 + MaxSegmentsPerPath - 1) / MaxSegmentsPerPath;
-            var prev = r.Path[0];
-            for (var i = step; i < r.Path.Count + step - 1; i += step)
+            var r = shown[n];
+            // every tick of the movement as it plays now (edits applied); the coarse Path if it is gone
+            var pts = _fm!.Route(_fm.Folder, r.Name)?.Frames.Select(f => f.Pos).ToList() ?? r.Path.ToList();
+            var d = new Drawn { R = r, Color = _pathColor == 1 ? ApiColors.Rgb[BotColors[n % BotColors.Length]] : TeamColor(r.Team), Ticks = pts.Count };
+            var keep = Thin(pts);
+            for (var i = 1; i < keep.Count; i++)
             {
-                var next = r.Path[Math.Min(i, r.Path.Count - 1)];
-                Beam(prev, next, color);
-                prev = next;
+                var (from, to) = (keep[i - 1], keep[i]);
+                var (a, b) = (pts[from], pts[to]);
+                if (_style == 1) b = a + (b - a) * 0.55f;   // dashed: the first half of each piece
+                if (Beam(a, b, d.Color) is { } beam) { d.Segments.Add((beam, from, to)); d.Shown.Add(d.Color); }
             }
             // the start stands out: a gold post where the bot begins
-            var start = r.Path[0];
+            var start = pts[0];
             Beam(start, start with { Z = start.Z + 72 }, Color.FromArgb(255, 228, 174, 57));
+            _drawn.Add(d);
+        }
+        Progress();
+    }
+
+    // the indices of the points to keep: Douglas-Peucker with Tolerance, raised until the path fits its beams
+    static List<int> Thin(IReadOnlyList<System.Numerics.Vector3> pts)
+    {
+        for (var tol = Tolerance; ; tol *= 1.5f)
+        {
+            var keep = new bool[pts.Count];
+            keep[0] = keep[^1] = true;
+            var stack = new Stack<(int, int)>();
+            stack.Push((0, pts.Count - 1));
+            while (stack.Count > 0)
+            {
+                var (lo, hi) = stack.Pop();
+                if (hi - lo < 2) continue;
+                var (best, bd) = (-1, tol);
+                for (var i = lo + 1; i < hi; i++)
+                {
+                    var dd = DistanceToSegment(pts[i], pts[lo], pts[hi]);
+                    if (dd > bd) (best, bd) = (i, dd);
+                }
+                if (best < 0) continue;
+                keep[best] = true;
+                stack.Push((lo, best));
+                stack.Push((best, hi));
+            }
+            var list = Enumerable.Range(0, pts.Count).Where(i => keep[i]).ToList();
+            if (list.Count - 1 <= MaxSegmentsPerPath || pts.Count < 3) return list;
         }
     }
 
-    void Beam(System.Numerics.Vector3 a, System.Numerics.Vector3 b, Color color)
+    static float DistanceToSegment(System.Numerics.Vector3 p, System.Numerics.Vector3 a, System.Numerics.Vector3 b)
+    {
+        var ab = b - a;
+        var len = ab.LengthSquared();
+        var t = len < 1e-4f ? 0 : Math.Clamp(System.Numerics.Vector3.Dot(p - a, ab) / len, 0f, 1f);
+        return System.Numerics.Vector3.Distance(p, a + ab * t);
+    }
+
+    // every 2 ticks: with Progress each piece is shaded by how far in time it is from the tick the bot plays
+    // (the plain path colour when off or when the bot plays nothing)
+    void Progress()
+    {
+        foreach (var d in _drawn)
+        {
+            var now = _progress && _fm != null ? _fm.ReplayTick(d.R.BotSlot) : -1;
+            var span = Math.Max(MinSpanTicks, d.Ticks * ProgressSpan);
+            for (var k = 0; k < d.Segments.Count; k++)
+            {
+                var (beam, from, to) = d.Segments[k];
+                var c = d.Color;
+                if (now >= 0)
+                {
+                    var far = from > now ? (from - now) / span : to < now ? (now - to) / (span / 2) : -1f;
+                    c = far < 0 ? Mix(d.Color, Color.White, 0.5f)
+                        : Mix(d.Color, Color.Black, MaxDim * MathF.Round(Math.Min(far, 1f) * ProgressSteps) / ProgressSteps);
+                }
+                if (c == d.Shown[k] || !beam.IsValid) continue;
+                d.Shown[k] = c;
+                beam.Render = c;
+                Utilities.SetStateChanged(beam, "CBaseModelEntity", "m_clrRender");
+            }
+        }
+    }
+
+    static Color Mix(Color a, Color b, float t) => Color.FromArgb(255,
+        (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+
+    CBeam? Beam(System.Numerics.Vector3 a, System.Numerics.Vector3 b, Color color)
     {
         var beam = Utilities.CreateEntityByName<CBeam>("beam");
-        if (beam == null) return;
+        if (beam == null) return null;
         beam.Render = color;
-        beam.Width = 2.5f;
+        beam.Width = Widths[_width];
+        if (_style == 2) beam.Amplitude = 1.5f;   // electric: the beam jitters
         beam.Teleport(new Vector(a.X, a.Y, a.Z + 4), new QAngle(0, 0, 0), new Vector(0, 0, 0));
         beam.EndPos.X = b.X;
         beam.EndPos.Y = b.Y;
         beam.EndPos.Z = b.Z + 4;
         beam.DispatchSpawn();
         _beams.Add(beam);
+        return beam;
     }
 
     void ClearBeams()
     {
         foreach (var b in _beams.Where(b => b.IsValid)) b.Remove();
         _beams.Clear();
+        _drawn.Clear();
     }
 
     // every tick: the game clears "spotted" for bots out of sight, the radar would drop them
@@ -368,6 +488,24 @@ public class FakeWallhack : BasePlugin
         Toggle();
         cmd.ReplyToCommand("[Wallhack] " + Describe());
         (caller ?? Human())?.PrintToCenter(_manual ? "Wallhack ON" : "Wallhack OFF");
+    }
+
+    [ConsoleCommand("fw_paths", "fw_paths - movement paths on / off")]
+    public void CmdPaths(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        _paths = !_paths;
+        SaveSettings();
+        SyncPaths();
+        (caller ?? Human())?.PrintToCenter(_paths ? "Paths ON" : "Paths OFF");
+    }
+
+    [ConsoleCommand("fw_progress", "fw_progress - path colours by how far the bot is (Progress) on / off")]
+    public void CmdProgress(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        _progress = !_progress;
+        SaveSettings();
+        Progress();
+        (caller ?? Human())?.PrintToCenter(_progress ? "Path progress ON" : "Path progress OFF");
     }
 
     [ConsoleCommand("fw_glows", "fw_glows - glowing copies and path beams (debug)")]

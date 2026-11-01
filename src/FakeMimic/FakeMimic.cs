@@ -1,4 +1,4 @@
-﻿// FakeMimic - Bot Mimic for CS2 fake demos.
+// FakeMimic - Bot Mimic for CS2 fake demos.
 // Records the local player and replays recordings on bots, all starting on the same tick,
 // so enemies come out exactly on time. Recording and replay run on CS2-Bot-Controller
 // (engine level: movement, view, buttons incl. shooting, subtick input); FakeMimic adds
@@ -41,10 +41,13 @@ public class Recording
     public ReplayTick[] Ticks = Array.Empty<ReplayTick>();
     public SubtickMove[] Subs = Array.Empty<SubtickMove>();
     public ReplayCommandFrame[] Commands = Array.Empty<ReplayCommandFrame>();
+    // what was bought while recording: the tick from the start and the item to give ("weapon_ak47")
+    public List<(int Tick, string Item)> Buys = new();
 
     // FMR2 = FMR1 + the byte size of each CS2-Bot-Controller struct, so a recording made with
-    // another BotController version is refused instead of replaying garbage
-    const string Magic = "FMR2", MagicV1 = "FMR1";
+    // another BotController version is refused instead of replaying garbage. The purchases follow as an
+    // optional "BUYS" section at the end: older FakeMimic versions stop reading before it.
+    const string Magic = "FMR2", MagicV1 = "FMR1", BuysMark = "BUYS";
 
     static int[] StructSizes() => [Unsafe.SizeOf<ReplayTick>(), Unsafe.SizeOf<SubtickMove>(), Unsafe.SizeOf<ReplayCommandFrame>()];
 
@@ -59,6 +62,10 @@ public class Recording
         Write(w, Ticks);
         Write(w, Subs);
         Write(w, Commands);
+        if (Buys.Count == 0) return;
+        w.Write(BuysMark);
+        w.Write(Buys.Count);
+        foreach (var (tick, item) in Buys) { w.Write(tick); w.Write(item); }
     }
 
     public static Recording Load(string path)
@@ -78,6 +85,8 @@ public class Recording
         rec.Ticks = Read<ReplayTick>(r);
         rec.Subs = Read<SubtickMove>(r);
         rec.Commands = Read<ReplayCommandFrame>(r);
+        if (r.BaseStream.Position < r.BaseStream.Length && r.ReadString() == BuysMark)
+            for (int i = r.ReadInt32(); i > 0; i--) rec.Buys.Add((r.ReadInt32(), r.ReadString()));
         return rec;
     }
 
@@ -106,6 +115,10 @@ class Replay
     public CCSPlayerController? Bot;
     public bool Running;      // StartReplay was called and the end was not reached yet
     public int LastWeaponDef;
+    public List<(int Tick, string Item)> Buys = new();   // of the prepared recording
+    public int NextBuy;
+    public bool Ended;        // played to the end since the last start
+    public int Length;        // ticks of the prepared recording
 }
 
 public partial class FakeMimic : BasePlugin
@@ -207,8 +220,15 @@ public partial class FakeMimic : BasePlugin
             if (!_bc.IsReplaying(slot))
             {
                 r.Running = false;
+                r.Ended = true;
                 OnReplayEnd(r);
                 continue;
+            }
+            // purchases at the tick they were made, before the weapon switch of that tick
+            if (r.NextBuy < r.Buys.Count)
+            {
+                var at = _bc.ReplayCursor(slot);
+                while (r.NextBuy < r.Buys.Count && r.Buys[r.NextBuy].Tick <= at) Buy(r.Bot, r.Buys[r.NextBuy++].Item);
             }
             if (_bc.TryGetReplayTick(slot, out var tick) && tick.WeaponDefIndex > 0 && tick.WeaponDefIndex != r.LastWeaponDef
                 && _bc.BotActiveWeaponDef(slot) != tick.WeaponDefIndex)
@@ -217,6 +237,41 @@ public partial class FakeMimic : BasePlugin
                 _bc.SwitchBotWeapon(slot, tick.WeaponDefIndex);
             }
         }
+    }
+
+    // ---------------- purchases ----------------
+    // Recorded from item_purchase while the player records; on replay the bot gets the item at the same
+    // tick. A rifle or pistol replaces the one in its slot, as buying does (the old one is removed, not dropped).
+    static readonly HashSet<string> Pistols = new()
+    {
+        "weapon_glock", "weapon_hkp2000", "weapon_usp_silencer", "weapon_p250", "weapon_fiveseven", "weapon_tec9",
+        "weapon_cz75a", "weapon_deagle", "weapon_elite", "weapon_revolver",
+    };
+
+    static bool Primary(string w) => w.StartsWith("weapon_") && !Pistols.Contains(w) && !w.Contains("knife") && !w.Contains("bayonet")
+        && w is not ("weapon_taser" or "weapon_c4" or "weapon_hegrenade" or "weapon_flashbang" or "weapon_smokegrenade"
+            or "weapon_molotov" or "weapon_incgrenade" or "weapon_decoy");
+
+    int _recStartTick;
+    List<(int Tick, string Item)>? _recBuys;
+
+    [GameEventHandler]
+    public HookResult OnPurchase(EventItemPurchase ev, GameEventInfo info)
+    {
+        if (_recName == null || _recBuys == null || ev.Userid != _recPlayer) return HookResult.Continue;
+        var item = ev.Weapon.StartsWith("weapon_") || ev.Weapon.StartsWith("item_") ? ev.Weapon : "weapon_" + ev.Weapon;
+        _recBuys.Add((Server.TickCount - _recStartTick, item));
+        Server.PrintToConsole($"[FM] recorded purchase '{ev.Weapon}' -> {item} at tick {_recBuys[^1].Tick}");
+        return HookResult.Continue;
+    }
+
+    void Buy(CCSPlayerController bot, string item)
+    {
+        if (bot.PlayerPawn.Value?.WeaponServices is not { } ws) return;
+        bool Same(string held) => Primary(item) ? Primary(held) : Pistols.Contains(item) && Pistols.Contains(held);
+        foreach (var held in ws.MyWeapons.Select(h => h.Value?.DesignerName).OfType<string>().Where(Same).ToList())
+            bot.RemoveItemByDesignerName(held, true);
+        bot.GiveNamedItem(item);
     }
 
     // ---------------- actions (shared by console commands and the menu) ----------------
@@ -245,6 +300,8 @@ public partial class FakeMimic : BasePlugin
         _recWeapons = pawn.WeaponServices!.MyWeapons.Select(h => h.Value?.DesignerName).OfType<string>().ToList();
         if (!_bc.SetReplayPawn(p.Slot, pawn.Handle) || !_bc.StartRecord(p.Slot)) return "recording did not start";
         _recName = name;
+        _recStartTick = Server.TickCount;
+        _recBuys = new();
         _api?.RaiseRecording(name, true);
         _recPlayer = p;
         return $"recording '{name}'...";
@@ -259,9 +316,11 @@ public partial class FakeMimic : BasePlugin
         var rec = new Recording
         {
             Team = _recPlayer.TeamNum, Weapons = _recWeapons ?? new(), Ticks = ticks, Subs = subs, Commands = commands,
+            Buys = _recBuys ?? new(),
         };
         rec.Save(PathOf(_recName));
-        var msg = $"saved '{_recName}': {rec.Seconds:0.0} s";
+        var msg = $"saved '{_recName}': {rec.Seconds:0.0} s" + (rec.Buys.Count > 0 ? $", {rec.Buys.Count} purchase(s)" : "");
+        _recBuys = null;
         _api?.RaiseRecording(_recName, false);
         _recName = null;
         return msg;
@@ -354,7 +413,7 @@ public partial class FakeMimic : BasePlugin
             Assign(bots[i].Recording, bots[i].Team == 3 ? "ct" : "t", _ => AddTimer(0.3f, () => Next(i + 1)));
         }
         AddTimer(0.5f, () => Next(0));
-        return $"setting up {bots.Count} bot(s) of this take, then they play it in a loop";
+        return $"setting up {bots.Count} bot(s) of this demo, then they play it in a loop";
     }
 
     string Go(Action? onStarted = null)
@@ -365,6 +424,7 @@ public partial class FakeMimic : BasePlugin
         _starting = true;
         _replays.RemoveAll(r => r.Bot is not { IsValid: true });
         ClearPaths();
+        ClearMap();   // the map as it was before the last run
         foreach (var r in _replays)
         {
             _bc.StopReplay(r.Bot!.Slot);
@@ -392,6 +452,7 @@ public partial class FakeMimic : BasePlugin
                 if (bot is not { IsValid: true } || pawn == null) continue;
                 r.LastWeaponDef = 0;
                 var rec = Prepare(r.Rec, r.Edits);
+                (r.Buys, r.NextBuy, r.Ended, r.Length) = (rec.Buys, 0, false, rec.Ticks.Length);
                 if (!_bc.SetReplayPawn(bot.Slot, pawn.Handle) || !_bc.LoadReplay(bot.Slot, rec.Ticks, rec.Subs, rec.Commands))
                 {
                     Server.PrintToConsole($"[FM] replay '{r.Name}' did not load on {bot.PlayerName}");
@@ -444,8 +505,15 @@ public partial class FakeMimic : BasePlugin
         if (!File.Exists(PathOf(name))) return $"no recording '{name}'";
         File.Delete(PathOf(name));
         File.Delete(EditsPathOf(name));
+        // the bot that played it goes too (bot_kick also lowers bot_quota, so no other bot takes its place)
+        var bots = _replays.Where(r => r.Name == name && r.Bot is { IsValid: true }).Select(r => r.Bot!).ToList();
         _replays.RemoveAll(r => r.Name == name);
-        return $"deleted '{name}'";
+        foreach (var b in bots)
+        {
+            _bc?.StopReplay(b.Slot);
+            Server.ExecuteCommand($"bot_kick \"{b.PlayerName}\"");
+        }
+        return $"deleted '{name}'" + (bots.Count > 0 ? " and its bot" : "");
     }
 
     string Rename(string from, string to)
@@ -528,7 +596,7 @@ public partial class FakeMimic : BasePlugin
         foreach (var k in _applied.Keys.ToList())
         {
             if (k[0] is 'w' or 'c') _applied.Remove(k);   // swatch colours, portraits: none in a new layout
-            else _applied[k] = k switch { "posx" => "X20", "posy" => "Y20", "poss" => "S0", _ => "V0" };
+            else _applied[k] = k switch { "posx" => "X100", "posy" => "Y100", "poss" => "S0", _ => "V0" };
         }
         _cls.Clear();
         var kv = new CEntityKeyValues();
@@ -652,6 +720,7 @@ public partial class FakeMimic : BasePlugin
     void CloseMenu(CCSPlayerController p)
     {
         _menu = null;
+        if (_grid != 0) SetGrid(0);
         SetDigits(false);
         if (_hud is not { IsValid: true }) return;
         _hud.SetHasClass("menu", "Hidden", true);
@@ -701,14 +770,23 @@ public partial class FakeMimic : BasePlugin
         {
             case "bg": ShowSettings(!_settingsOpen); return;   // gear in the header
             case "sb": ShowSettings(false); return;            // Back on the settings screen
+            case "bm": SetGrid(_grid == 1 ? 0 : 1); return;     // move: the grid of cells over the screen
+            case "bz": SetGrid(_grid == 2 ? 0 : 2); return;     // size
         }
-        // slider segments: sx0..sx10, sy0..sy10, ss0..ss10
+        // grid cells g<col>_<row>
+        if (buttonId.Length >= 4 && buttonId[0] == 'g' && buttonId.IndexOf('_') is > 1 and var u
+            && int.TryParse(buttonId[1..u], out var col) && int.TryParse(buttonId[(u + 1)..], out var row))
+        {
+            GridClick(col, row);
+            return;
+        }
+        // slider segments: sx0..sx40, sy0..sy40, ss0..ss40 (a position step is 1/5 of a slider step)
         if (buttonId.Length >= 3 && buttonId[0] == 's' && int.TryParse(buttonId[2..], out var v))
         {
             switch (buttonId[1])
             {
-                case 'x': _menuX = v; break;
-                case 'y': _menuY = v; break;
+                case 'x': _menuX = v * PosPerSlider; break;
+                case 'y': _menuY = v * PosPerSlider; break;
                 case 's': _menuS = v; break;
                 default: return;
             }
@@ -733,20 +811,20 @@ public partial class FakeMimic : BasePlugin
     }
 
     // ---------------- window position / size (Settings screen, remembered between sessions) ----------------
-    // The HUD reports clicks only (no drag), so each slider is a bar + knob with SliderSteps+1
+    // The HUD reports clicks only (no drag, no scripts), so each slider is a bar + knob with SliderSteps+1
     // invisible buttons over it (sx0..sx40 ...): a click jumps the knob there. The CSS has a class
-    // per step: X0..X40 / Y0..Y40 move wrapper panels (2.5% of the screen each, 20 = crosshair),
-    // S0..S40 scale, V0..V40 on the slider itself draws fill and knob.
+    // per step: X0..X200 / Y0..Y200 move wrapper panels (0.5% of the screen each, 100 = crosshair),
+    // S0..S40 scale, V0..V40 on the slider itself draws fill and knob. Move / Size in the header: StartDrag.
 
-    const int SliderSteps = 40;
-    const string PrefsVersion = "v2";
-    int _menuX = 20, _menuY = 20, _menuS = 0;   // default: top-left corner on the crosshair, compact
+    const int SliderSteps = 40, PosSteps = 200, PosPerSlider = PosSteps / SliderSteps;
+    const string PrefsVersion = "v3", PrefsVersion2 = "v2";
+    int _menuX = 100, _menuY = 100, _menuS = 0;   // default: top-left corner on the crosshair, compact
     bool _settingsOpen;
 
     // classes currently on each panel, so only the changed ones are switched (the layout starts with these)
     readonly Dictionary<string, string> _applied = new()
     {
-        ["posx"] = "X20", ["posy"] = "Y20", ["poss"] = "S0", ["slx"] = "V0", ["sly"] = "V0", ["sls"] = "V0",
+        ["posx"] = "X100", ["posy"] = "Y100", ["poss"] = "S0", ["slx"] = "V0", ["sly"] = "V0", ["sls"] = "V0",
     };
 
     string PrefsPath => Path.Combine(FakeDemoPaths.Root, "menu.txt");
@@ -756,9 +834,11 @@ public partial class FakeMimic : BasePlugin
         try
         {
             var p = File.ReadAllText(PrefsPath).Split(' ');
-            if (p[0] != PrefsVersion) return;   // older 11-step file: keep the defaults
-            int V(string s) => Math.Clamp(int.Parse(s), 0, SliderSteps);
-            (_menuX, _menuY, _menuS) = (V(p[1]), V(p[2]), V(p[3]));
+            // v2 had 40 position steps; older 11-step files keep the defaults
+            var k = p[0] == PrefsVersion ? 1 : p[0] == PrefsVersion2 ? PosPerSlider : 0;
+            if (k == 0) return;
+            int P(string s) => Math.Clamp(int.Parse(s) * k, 0, PosSteps);
+            (_menuX, _menuY, _menuS) = (P(p[1]), P(p[2]), Math.Clamp(int.Parse(p[3]), 0, SliderSteps));
         }
         catch (Exception) { /* no file: defaults */ }
     }
@@ -779,12 +859,44 @@ public partial class FakeMimic : BasePlugin
 
     void ApplyMenuPrefs(CCSCustomHudLayout hud)
     {
-        foreach (var (key, value, wrapper, cls) in new[] { ('x', _menuX, "posx", "X"), ('y', _menuY, "posy", "Y"), ('s', _menuS, "poss", "S") })
+        foreach (var (key, value, wrapper, cls, per) in new[] { ('x', _menuX, "posx", "X", PosPerSlider), ('y', _menuY, "posy", "Y", PosPerSlider), ('s', _menuS, "poss", "S", 1) })
         {
             SetOnly(hud, wrapper, $"{cls}{value}");
-            SetOnly(hud, $"sl{key}", $"V{value}");
-            hud.SetDialogVariableString("menu", $"v{key}", $"{value * 2.5:0.#}%");
+            SetOnly(hud, $"sl{key}", $"V{(value + per / 2) / per}");
+            hud.SetDialogVariableString("menu", $"v{key}", per == 1 ? $"{value * 2.5:0.#}%" : $"{value * 0.5:0.#}%");
         }
+        SetOnly(hud, "grid", $"S{_menuS}");   // the outline shown while moving has the menu's size
+    }
+
+    // ---------------- Move / Size by a click ----------------
+    // The HUD reports clicks only, so Move / Size in the header show 20 x 20 invisible cells over the screen
+    // (g<col>_<row>, 96 x 54 px = 10 position steps each): Move puts the menu's top-left corner on the
+    // clicked cell, Size scales the menu so its right edge reaches it. The same header button again cancels.
+    int _grid;   // 0 none, 1 moving, 2 sizing
+
+    void SetGrid(int mode)
+    {
+        _grid = mode;
+        if (_hud is not { IsValid: true }) return;
+        _hud.SetHasClass("root", "Moving", mode == 1);
+        _hud.SetHasClass("root", "Sizing", mode == 2);
+        _hud.SetDialogVariableString("root", "gridhint", mode == 1 ? "Click where the menu's top-left corner goes  ·  the same button again cancels"
+            : mode == 2 ? "Click where the menu's right edge goes  ·  the same button again cancels" : "");
+    }
+
+    void GridClick(int col, int row)
+    {
+        if (_hud is not { IsValid: true }) return;
+        if (_grid == 1) (_menuX, _menuY) = (Math.Clamp(col * 10, 0, PosSteps), Math.Clamp(row * 10, 0, PosSteps));
+        else if (_grid == 2)
+        {
+            // the right edge of the clicked cell becomes the menu's right edge (9.6 px a step, 460 px at scale 1)
+            var width = (col + 1) * 96f - _menuX * 9.6f;
+            _menuS = Math.Clamp((int)MathF.Round((width / 460f - 0.7f) / 0.015f), 0, SliderSteps);
+        }
+        SaveMenuPrefs();
+        ApplyMenuPrefs(_hud);
+        SetGrid(0);
     }
 
     void ShowSettings(bool open)
@@ -878,7 +990,7 @@ public partial class FakeMimic : BasePlugin
             },
         };
         if (_take != null)
-            items.Add(new($"Stop take '{_take}'", pl => { Say(pl, StopTake()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
+            items.Add(new($"Stop demo '{_take}'", pl => { Say(pl, StopTake()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
         else if (_recName != null)
             items.Add(new($"Stop and save '{_recName}'", pl => { Say(pl, StopRec()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
         else
@@ -902,15 +1014,16 @@ public partial class FakeMimic : BasePlugin
                     SetLoop(i == 2);
                     // the bots start half a second later: the menu stays and shows it then
                     Say(pl, Play(() => Reshow(pl, "FakeMimic", MainMenu)));
+                    _api?.RaiseBotsStarted();
                 }
                 MainMenu(pl);
             },
         });
         items.Add(new("Clear assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
         if (_take == null)
-            items.Add(new("Start take (bots + demo)", pl => Say(pl, StartTake())));
+            items.Add(new("Record demo (bots play)", pl => Say(pl, StartTake())));
         else
-            items.Add(new("Take is recording", pl => { Say(pl, StopTake()); MainMenu(pl); }) { Value = "REC", On = true });
+            items.Add(new("Demo is recording", pl => { Say(pl, StopTake()); MainMenu(pl); }) { Value = "REC", On = true });
 
         // modules (FakeDirector, FakeWallhack, ...): one row each, each opens its own screen;
         // more than fit go behind one "Modules" row
@@ -1067,7 +1180,49 @@ public partial class FakeMimic : BasePlugin
     }
 
     [ConsoleCommand("fm_go", "fm_go - respawn assigned bots and start all replays")]
-    public void CmdGo(CCSPlayerController? caller, CommandInfo cmd) => cmd.ReplyToCommand("[FM] " + Play());
+    public void CmdGo(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        cmd.ReplyToCommand("[FM] " + Play());
+        _api?.RaiseBotsStarted();
+    }
+
+    // ---------------- one key per action (keys are set in the launcher) ----------------
+
+    void Tell(CCSPlayerController? caller, string center, string chat)
+    {
+        var p = caller ?? LocalHuman();
+        if (p == null) return;
+        p.PrintToCenter(center);
+        Say(p, chat);
+    }
+
+    [ConsoleCommand("fm_rectoggle", "fm_rectoggle - record a movement under the next free name / stop and save it")]
+    public void CmdRecToggle(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        if (_recName != null) { Tell(caller, "Movement saved", StopRec()); return; }
+        var name = NextName();
+        // over bots the recording starts with them, half a second later
+        if (_replays.Count > 0) { Tell(caller, $"REC {name}", RecordOver(name)); return; }
+        var msg = StartRec(name);
+        Tell(caller, _recName != null ? $"REC {name}" : "Not recording", msg);
+    }
+
+    [ConsoleCommand("fm_bots", "fm_bots - start the assigned bots (Once / Loop as set) or stop them")]
+    public void CmdBots(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        if (_replays.Any(r => r.Running) || _looping || _starting) { Tell(caller, "Bots stopped", Halt()); return; }
+        if (!_replays.Any(r => r.Bot is { IsValid: true })) { Tell(caller, "No bots assigned", "no bots assigned: Movements › a movement › Play on T/CT bot"); return; }
+        Tell(caller, _loop ? "Bots: loop" : "Bots: once", Play());
+        _api?.RaiseBotsStarted();
+    }
+
+    [ConsoleCommand("fm_loop", "fm_loop - bots play once / in a loop (restarts them if they play)")]
+    public void CmdLoop(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        SetLoop(!_loop);
+        var playing = _replays.Any(r => r.Running) || _looping || _starting;
+        Tell(caller, _loop ? "Bots play: Loop" : "Bots play: Once", playing ? Play() : $"bots will play {(_loop ? "in a loop" : "once")}");
+    }
 
     [ConsoleCommand("fm_halt", "fm_halt - stop all replays")]
     public void CmdHalt(CCSPlayerController? caller, CommandInfo cmd) => cmd.ReplyToCommand("[FM] " + Halt());

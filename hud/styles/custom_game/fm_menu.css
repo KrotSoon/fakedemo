@@ -2,14 +2,14 @@
    Position (Pos0..Pos5) and size (Size0..Size2) classes are switched by the plugin
    from the two tool buttons in the header (the HUD has no drag events). */
 
-.Root {
+.Root, .Stage {
     width: 100%;
     height: 100%;
 }
 
 /* Panorama clips every panel's children to its box: the menu sliding in from the left went past the
    left edge of the position wrappers and a hovered row (+12px) past the right edge of the rows */
-.Root, #posx, #posy, #poss, .Rows, .SettingsPanel, .Row {
+.Root, .Stage, #posx, #posy, #poss, .Rows, .SettingsPanel, .Row {
     overflow: noclip;
 }
 
@@ -27,7 +27,7 @@
     box-shadow: #00000066 0px 12px 40px 0px;
 
     transition-property: opacity, transform;
-    transition-duration: .2s, .32s;
+    transition-duration: 0.12s, 0.192s;
     transition-timing-function: ease-out, cubic-bezier(.2, 1.5, .35, 1);
     opacity: 1;
     transform: translateX(0px);
@@ -35,7 +35,7 @@
     &.Hidden {
         opacity: 0;
         transform: translateX(-40px);
-        transition-duration: .14s;
+        transition-duration: 0.084s;
         transition-timing-function: ease-in;
     }
 }
@@ -51,7 +51,7 @@
     horizontal-align: left;
     vertical-align: top;
     transition-property: transform;
-    transition-duration: .38s;
+    transition-duration: 0.228s;
     transition-timing-function: cubic-bezier(.2, 1.4, .35, 1);
 }
 /* a panel with a transform is still cut at its own box: the menu slides in from -40px, so the
@@ -59,88 +59,6 @@
 #posx { margin-left: -60px; }
 #poss { padding-left: 60px; transform-origin: 60px 0px; }
 #menu { horizontal-align: left; vertical-align: top; }
-#posx.X0 { transform: translateX(0px); }
-#posx.X1 { transform: translateX(48px); }
-#posx.X2 { transform: translateX(96px); }
-#posx.X3 { transform: translateX(144px); }
-#posx.X4 { transform: translateX(192px); }
-#posx.X5 { transform: translateX(240px); }
-#posx.X6 { transform: translateX(288px); }
-#posx.X7 { transform: translateX(336px); }
-#posx.X8 { transform: translateX(384px); }
-#posx.X9 { transform: translateX(432px); }
-#posx.X10 { transform: translateX(480px); }
-#posx.X11 { transform: translateX(528px); }
-#posx.X12 { transform: translateX(576px); }
-#posx.X13 { transform: translateX(624px); }
-#posx.X14 { transform: translateX(672px); }
-#posx.X15 { transform: translateX(720px); }
-#posx.X16 { transform: translateX(768px); }
-#posx.X17 { transform: translateX(816px); }
-#posx.X18 { transform: translateX(864px); }
-#posx.X19 { transform: translateX(912px); }
-#posx.X20 { transform: translateX(960px); }
-#posx.X21 { transform: translateX(1008px); }
-#posx.X22 { transform: translateX(1056px); }
-#posx.X23 { transform: translateX(1104px); }
-#posx.X24 { transform: translateX(1152px); }
-#posx.X25 { transform: translateX(1200px); }
-#posx.X26 { transform: translateX(1248px); }
-#posx.X27 { transform: translateX(1296px); }
-#posx.X28 { transform: translateX(1344px); }
-#posx.X29 { transform: translateX(1392px); }
-#posx.X30 { transform: translateX(1440px); }
-#posx.X31 { transform: translateX(1488px); }
-#posx.X32 { transform: translateX(1536px); }
-#posx.X33 { transform: translateX(1584px); }
-#posx.X34 { transform: translateX(1632px); }
-#posx.X35 { transform: translateX(1680px); }
-#posx.X36 { transform: translateX(1728px); }
-#posx.X37 { transform: translateX(1776px); }
-#posx.X38 { transform: translateX(1824px); }
-#posx.X39 { transform: translateX(1872px); }
-#posx.X40 { transform: translateX(1920px); }
-#posy.Y0 { transform: translateY(0px); }
-#posy.Y1 { transform: translateY(27px); }
-#posy.Y2 { transform: translateY(54px); }
-#posy.Y3 { transform: translateY(81px); }
-#posy.Y4 { transform: translateY(108px); }
-#posy.Y5 { transform: translateY(135px); }
-#posy.Y6 { transform: translateY(162px); }
-#posy.Y7 { transform: translateY(189px); }
-#posy.Y8 { transform: translateY(216px); }
-#posy.Y9 { transform: translateY(243px); }
-#posy.Y10 { transform: translateY(270px); }
-#posy.Y11 { transform: translateY(297px); }
-#posy.Y12 { transform: translateY(324px); }
-#posy.Y13 { transform: translateY(351px); }
-#posy.Y14 { transform: translateY(378px); }
-#posy.Y15 { transform: translateY(405px); }
-#posy.Y16 { transform: translateY(432px); }
-#posy.Y17 { transform: translateY(459px); }
-#posy.Y18 { transform: translateY(486px); }
-#posy.Y19 { transform: translateY(513px); }
-#posy.Y20 { transform: translateY(540px); }
-#posy.Y21 { transform: translateY(567px); }
-#posy.Y22 { transform: translateY(594px); }
-#posy.Y23 { transform: translateY(621px); }
-#posy.Y24 { transform: translateY(648px); }
-#posy.Y25 { transform: translateY(675px); }
-#posy.Y26 { transform: translateY(702px); }
-#posy.Y27 { transform: translateY(729px); }
-#posy.Y28 { transform: translateY(756px); }
-#posy.Y29 { transform: translateY(783px); }
-#posy.Y30 { transform: translateY(810px); }
-#posy.Y31 { transform: translateY(837px); }
-#posy.Y32 { transform: translateY(864px); }
-#posy.Y33 { transform: translateY(891px); }
-#posy.Y34 { transform: translateY(918px); }
-#posy.Y35 { transform: translateY(945px); }
-#posy.Y36 { transform: translateY(972px); }
-#posy.Y37 { transform: translateY(999px); }
-#posy.Y38 { transform: translateY(1026px); }
-#posy.Y39 { transform: translateY(1053px); }
-#posy.Y40 { transform: translateY(1080px); }
 #poss.S0 { transform: scale3d(0.700, 0.700, 1); }
 #poss.S1 { transform: scale3d(0.715, 0.715, 1); }
 #poss.S2 { transform: scale3d(0.730, 0.730, 1); }
@@ -219,7 +137,7 @@
     background-color: #ffffff14;
 
     transition-property: background-color, transform;
-    transition-duration: .12s, .25s;
+    transition-duration: 0.072s, 0.15s;
     transition-timing-function: ease-out, cubic-bezier(.2, 1.6, .4, 1);
 
     & Label {
@@ -256,7 +174,7 @@
     background-color: #ffffff0d;
 
     transition-property: background-color, transform, opacity;
-    transition-duration: .1s, .3s, .3s;
+    transition-duration: 0.06s, 0.18s, 0.18s;
     transition-timing-function: ease-out, cubic-bezier(.2, 1.6, .4, 1), ease-out;
     transform: translateX(0px);
 
@@ -268,7 +186,7 @@
     &:active {
         background-color: #e4ae3960;
         transform: translateX(6px) scale3d(.98, .98, 1);
-        transition-duration: .05s;
+        transition-duration: 0.03s;
     }
 
     &.Empty {
@@ -287,7 +205,7 @@
     background-color: #ffffff1a;
 
     transition-property: background-color, transform;
-    transition-duration: .12s, .3s;
+    transition-duration: 0.072s, 0.18s;
     transition-timing-function: ease-out, cubic-bezier(.2, 1.8, .4, 1);
 
     & Label {
@@ -367,7 +285,7 @@
     border-radius: 12px;
     background-color: #ffffff26;
     transition-property: background-color;
-    transition-duration: .15s;
+    transition-duration: 0.09s;
 }
 .Thumb {
     width: 18px;
@@ -377,7 +295,7 @@
     background-color: #ffffff;
     transform: translateX(0px);
     transition-property: transform;
-    transition-duration: .28s;
+    transition-duration: 0.168s;
     transition-timing-function: cubic-bezier(.2, 1.6, .4, 1);
 }
 .On .Switch { background-color: #e4ae39; }
@@ -462,7 +380,7 @@
     border: 2px solid #ff963070;
     background-color: #ffffff0d;
     transition-property: transform, border;
-    transition-duration: .25s, .12s;
+    transition-duration: 0.15s, 0.072s;
     transition-timing-function: cubic-bezier(.2, 1.6, .4, 1), ease-out;
     &:hover { transform: translateY(-3px); }
     &.CT { border: 2px solid #5aa0ff70; }
@@ -514,7 +432,7 @@
     border-radius: 9px;
     background-color: none;
     transition-property: background-color;
-    transition-duration: .12s;
+    transition-duration: 0.072s;
     & Label { horizontal-align: center; vertical-align: center; font-size: 15px; color: #ffffffc0; }
     &:hover { background-color: #ffffff1a; }
     &.Sel { background-color: #e4ae39; }
@@ -534,7 +452,7 @@
     border-radius: 9px;
     border: 2px solid #ffffff20;
     transition-property: transform;
-    transition-duration: .25s;
+    transition-duration: 0.15s;
     transition-timing-function: cubic-bezier(.2, 1.6, .4, 1);
     &:hover { transform: scale3d(1.08, 1.08, 1); }
     &.Sel { border: 2px solid #e4ae39; }
@@ -598,7 +516,7 @@
 .Fill {
     background-color: #e4ae39;
     transition-property: width;
-    transition-duration: .3s;
+    transition-duration: 0.18s;
     transition-timing-function: cubic-bezier(.2, 1.4, .35, 1);
 }
 .Knob {
@@ -610,7 +528,7 @@
     background-color: #ffffff;
     box-shadow: #00000080 0px 2px 6px 0px;
     transition-property: transform;
-    transition-duration: .3s;
+    transition-duration: 0.18s;
     transition-timing-function: cubic-bezier(.2, 1.6, .35, 1);
 }
 .Slider:hover .Knob { background-color: #ffd98a; }
@@ -745,19 +663,19 @@
 #menu.SwapB .Slider { animation-name: fm-in-b; }
 #menu.SwapB .Title { animation-name: fm-title-b; }
 .Row, .Slider, .Title {
-    animation-duration: .3s;
+    animation-duration: 0.18s;
     animation-timing-function: ease-out;
     animation-fill-mode: backwards;
 }
-.Title { animation-duration: .22s; }
-#r2, #sly { animation-delay: .025s; }
-#r3, #sls { animation-delay: .05s; }
-#r4, #rsb { animation-delay: .075s; }
-#r5 { animation-delay: .1s; }
-#r6 { animation-delay: .125s; }
-#r7 { animation-delay: .15s; }
-#r8 { animation-delay: .175s; }
-#r9 { animation-delay: .2s; }
+.Title { animation-duration: 0.13s; }
+#r2, #sly { animation-delay: 0.015s; }
+#r3, #sls { animation-delay: 0.03s; }
+#r4, #rsb { animation-delay: 0.045s; }
+#r5 { animation-delay: 0.06s; }
+#r6 { animation-delay: 0.075s; }
+#r7 { animation-delay: 0.09s; }
+#r8 { animation-delay: 0.105s; }
+#r9 { animation-delay: 0.12s; }
 
 /* ---- agent portraits (one class per agent with a square portrait in pak01_dir.vpk (panorama/images/econ/characters/customplayer_*_square_png); the plugin sets P_<model file name> on a card) ---- */
 .P_ctm_diver_varianta { background-image: url("s2r://panorama/images/econ/characters/customplayer_ctm_diver_varianta_square_png.vtex"); }
@@ -903,3 +821,498 @@
 .P_tm_separatist_variantd { background-image: url("s2r://panorama/images/econ/characters/customplayer_tm_separatist_variantd_square_png.vtex"); }
 .P_ct_map_based { background-image: url("s2r://panorama/images/econ/characters/customplayer_ct_map_based_png.vtex"); }
 
+
+/* ---------- moving and sizing with the mouse ----------
+   The HUD reports clicks only and runs no scripts, so Move / Size in the header show a grid of 20 x 20
+   invisible cells over the screen (96 x 54 px = 10 position steps). Move: a hovered cell shows the menu's
+   outline with its top-left corner there, a click puts the menu there. Size: a hovered cell shows a corner,
+   a click scales the menu so its right edge reaches that cell. */
+#grid {
+    width: 1920px;
+    height: 1080px;
+    flow-children: right-wrap;
+    visibility: collapse;
+    overflow: noclip;
+}
+#root.Moving #grid, #root.Sizing #grid { visibility: visible; background-color: #00000040; }
+.Cell {
+    width: 96px;
+    height: 54px;
+    overflow: noclip;
+}
+.Ghost {
+    visibility: collapse;
+    border: 2px solid #e4ae39;
+    border-radius: 14px;
+    background-color: #e4ae3918;
+}
+#root.Moving .Cell:hover .Ghost { visibility: visible; }
+#root.Sizing .Ghost { width: 22px; height: 22px; border-radius: 0px; border-width: 0px 4px 4px 0px; background-color: #00000000; }
+#root.Sizing .Cell:hover .Ghost { visibility: visible; }
+#gridhint {
+    width: 1920px;
+    margin-top: 120px;
+    text-align: center;
+    font-size: 26px;
+    color: #ffffffe0;
+    text-shadow: 0px 0px 6px 2px #000000;
+    visibility: collapse;
+}
+#root.Moving #gridhint, #root.Sizing #gridhint { visibility: visible; }
+
+/* header icons drawn with bars: a cross (move) and a corner (size) */
+.Ico { background-color: #ffffffd0; horizontal-align: center; vertical-align: center; }
+.MoveH { width: 16px; height: 2px; }
+.MoveV { width: 2px; height: 16px; }
+.SizeH { width: 12px; height: 2px; margin: 8px 0px 0px 0px; }
+.SizeV { width: 2px; height: 12px; margin: 0px 0px 0px 8px; }
+#root.Moving #bm, #root.Sizing #bz { background-color: #e4ae39; }
+#root.Moving #bm .Ico, #root.Sizing #bz .Ico { background-color: #161a22; }
+
+/* the outline shown while moving has the menu's size (scale S0..S40) */
+#grid.S0 .Ghost { width: 322px; height: 392px; }
+#grid.S1 .Ghost { width: 329px; height: 400px; }
+#grid.S2 .Ghost { width: 336px; height: 409px; }
+#grid.S3 .Ghost { width: 343px; height: 417px; }
+#grid.S4 .Ghost { width: 350px; height: 426px; }
+#grid.S5 .Ghost { width: 356px; height: 434px; }
+#grid.S6 .Ghost { width: 363px; height: 442px; }
+#grid.S7 .Ghost { width: 370px; height: 451px; }
+#grid.S8 .Ghost { width: 377px; height: 459px; }
+#grid.S9 .Ghost { width: 384px; height: 468px; }
+#grid.S10 .Ghost { width: 391px; height: 476px; }
+#grid.S11 .Ghost { width: 398px; height: 484px; }
+#grid.S12 .Ghost { width: 405px; height: 493px; }
+#grid.S13 .Ghost { width: 412px; height: 501px; }
+#grid.S14 .Ghost { width: 419px; height: 510px; }
+#grid.S15 .Ghost { width: 425px; height: 518px; }
+#grid.S16 .Ghost { width: 432px; height: 526px; }
+#grid.S17 .Ghost { width: 439px; height: 535px; }
+#grid.S18 .Ghost { width: 446px; height: 543px; }
+#grid.S19 .Ghost { width: 453px; height: 552px; }
+#grid.S20 .Ghost { width: 460px; height: 560px; }
+#grid.S21 .Ghost { width: 467px; height: 568px; }
+#grid.S22 .Ghost { width: 474px; height: 577px; }
+#grid.S23 .Ghost { width: 481px; height: 585px; }
+#grid.S24 .Ghost { width: 488px; height: 594px; }
+#grid.S25 .Ghost { width: 494px; height: 602px; }
+#grid.S26 .Ghost { width: 501px; height: 610px; }
+#grid.S27 .Ghost { width: 508px; height: 619px; }
+#grid.S28 .Ghost { width: 515px; height: 627px; }
+#grid.S29 .Ghost { width: 522px; height: 636px; }
+#grid.S30 .Ghost { width: 529px; height: 644px; }
+#grid.S31 .Ghost { width: 536px; height: 652px; }
+#grid.S32 .Ghost { width: 543px; height: 661px; }
+#grid.S33 .Ghost { width: 550px; height: 669px; }
+#grid.S34 .Ghost { width: 557px; height: 678px; }
+#grid.S35 .Ghost { width: 564px; height: 686px; }
+#grid.S36 .Ghost { width: 570px; height: 694px; }
+#grid.S37 .Ghost { width: 577px; height: 703px; }
+#grid.S38 .Ghost { width: 584px; height: 711px; }
+#grid.S39 .Ghost { width: 591px; height: 720px; }
+#grid.S40 .Ghost { width: 598px; height: 728px; }
+
+
+/* position: 0.5 % of the 1920 x 1080 layout per step, X100 / Y100 = top-left corner on the crosshair */
+#posx.X0 { transform: translateX(0px); }
+#posx.X1 { transform: translateX(9.6px); }
+#posx.X2 { transform: translateX(19.2px); }
+#posx.X3 { transform: translateX(28.8px); }
+#posx.X4 { transform: translateX(38.4px); }
+#posx.X5 { transform: translateX(48px); }
+#posx.X6 { transform: translateX(57.6px); }
+#posx.X7 { transform: translateX(67.2px); }
+#posx.X8 { transform: translateX(76.8px); }
+#posx.X9 { transform: translateX(86.4px); }
+#posx.X10 { transform: translateX(96px); }
+#posx.X11 { transform: translateX(105.6px); }
+#posx.X12 { transform: translateX(115.2px); }
+#posx.X13 { transform: translateX(124.8px); }
+#posx.X14 { transform: translateX(134.4px); }
+#posx.X15 { transform: translateX(144px); }
+#posx.X16 { transform: translateX(153.6px); }
+#posx.X17 { transform: translateX(163.2px); }
+#posx.X18 { transform: translateX(172.8px); }
+#posx.X19 { transform: translateX(182.4px); }
+#posx.X20 { transform: translateX(192px); }
+#posx.X21 { transform: translateX(201.6px); }
+#posx.X22 { transform: translateX(211.2px); }
+#posx.X23 { transform: translateX(220.8px); }
+#posx.X24 { transform: translateX(230.4px); }
+#posx.X25 { transform: translateX(240px); }
+#posx.X26 { transform: translateX(249.6px); }
+#posx.X27 { transform: translateX(259.2px); }
+#posx.X28 { transform: translateX(268.8px); }
+#posx.X29 { transform: translateX(278.4px); }
+#posx.X30 { transform: translateX(288px); }
+#posx.X31 { transform: translateX(297.6px); }
+#posx.X32 { transform: translateX(307.2px); }
+#posx.X33 { transform: translateX(316.8px); }
+#posx.X34 { transform: translateX(326.4px); }
+#posx.X35 { transform: translateX(336px); }
+#posx.X36 { transform: translateX(345.6px); }
+#posx.X37 { transform: translateX(355.2px); }
+#posx.X38 { transform: translateX(364.8px); }
+#posx.X39 { transform: translateX(374.4px); }
+#posx.X40 { transform: translateX(384px); }
+#posx.X41 { transform: translateX(393.6px); }
+#posx.X42 { transform: translateX(403.2px); }
+#posx.X43 { transform: translateX(412.8px); }
+#posx.X44 { transform: translateX(422.4px); }
+#posx.X45 { transform: translateX(432px); }
+#posx.X46 { transform: translateX(441.6px); }
+#posx.X47 { transform: translateX(451.2px); }
+#posx.X48 { transform: translateX(460.8px); }
+#posx.X49 { transform: translateX(470.4px); }
+#posx.X50 { transform: translateX(480px); }
+#posx.X51 { transform: translateX(489.6px); }
+#posx.X52 { transform: translateX(499.2px); }
+#posx.X53 { transform: translateX(508.8px); }
+#posx.X54 { transform: translateX(518.4px); }
+#posx.X55 { transform: translateX(528px); }
+#posx.X56 { transform: translateX(537.6px); }
+#posx.X57 { transform: translateX(547.2px); }
+#posx.X58 { transform: translateX(556.8px); }
+#posx.X59 { transform: translateX(566.4px); }
+#posx.X60 { transform: translateX(576px); }
+#posx.X61 { transform: translateX(585.6px); }
+#posx.X62 { transform: translateX(595.2px); }
+#posx.X63 { transform: translateX(604.8px); }
+#posx.X64 { transform: translateX(614.4px); }
+#posx.X65 { transform: translateX(624px); }
+#posx.X66 { transform: translateX(633.6px); }
+#posx.X67 { transform: translateX(643.2px); }
+#posx.X68 { transform: translateX(652.8px); }
+#posx.X69 { transform: translateX(662.4px); }
+#posx.X70 { transform: translateX(672px); }
+#posx.X71 { transform: translateX(681.6px); }
+#posx.X72 { transform: translateX(691.2px); }
+#posx.X73 { transform: translateX(700.8px); }
+#posx.X74 { transform: translateX(710.4px); }
+#posx.X75 { transform: translateX(720px); }
+#posx.X76 { transform: translateX(729.6px); }
+#posx.X77 { transform: translateX(739.2px); }
+#posx.X78 { transform: translateX(748.8px); }
+#posx.X79 { transform: translateX(758.4px); }
+#posx.X80 { transform: translateX(768px); }
+#posx.X81 { transform: translateX(777.6px); }
+#posx.X82 { transform: translateX(787.2px); }
+#posx.X83 { transform: translateX(796.8px); }
+#posx.X84 { transform: translateX(806.4px); }
+#posx.X85 { transform: translateX(816px); }
+#posx.X86 { transform: translateX(825.6px); }
+#posx.X87 { transform: translateX(835.2px); }
+#posx.X88 { transform: translateX(844.8px); }
+#posx.X89 { transform: translateX(854.4px); }
+#posx.X90 { transform: translateX(864px); }
+#posx.X91 { transform: translateX(873.6px); }
+#posx.X92 { transform: translateX(883.2px); }
+#posx.X93 { transform: translateX(892.8px); }
+#posx.X94 { transform: translateX(902.4px); }
+#posx.X95 { transform: translateX(912px); }
+#posx.X96 { transform: translateX(921.6px); }
+#posx.X97 { transform: translateX(931.2px); }
+#posx.X98 { transform: translateX(940.8px); }
+#posx.X99 { transform: translateX(950.4px); }
+#posx.X100 { transform: translateX(960px); }
+#posx.X101 { transform: translateX(969.6px); }
+#posx.X102 { transform: translateX(979.2px); }
+#posx.X103 { transform: translateX(988.8px); }
+#posx.X104 { transform: translateX(998.4px); }
+#posx.X105 { transform: translateX(1008px); }
+#posx.X106 { transform: translateX(1017.6px); }
+#posx.X107 { transform: translateX(1027.2px); }
+#posx.X108 { transform: translateX(1036.8px); }
+#posx.X109 { transform: translateX(1046.4px); }
+#posx.X110 { transform: translateX(1056px); }
+#posx.X111 { transform: translateX(1065.6px); }
+#posx.X112 { transform: translateX(1075.2px); }
+#posx.X113 { transform: translateX(1084.8px); }
+#posx.X114 { transform: translateX(1094.4px); }
+#posx.X115 { transform: translateX(1104px); }
+#posx.X116 { transform: translateX(1113.6px); }
+#posx.X117 { transform: translateX(1123.2px); }
+#posx.X118 { transform: translateX(1132.8px); }
+#posx.X119 { transform: translateX(1142.4px); }
+#posx.X120 { transform: translateX(1152px); }
+#posx.X121 { transform: translateX(1161.6px); }
+#posx.X122 { transform: translateX(1171.2px); }
+#posx.X123 { transform: translateX(1180.8px); }
+#posx.X124 { transform: translateX(1190.4px); }
+#posx.X125 { transform: translateX(1200px); }
+#posx.X126 { transform: translateX(1209.6px); }
+#posx.X127 { transform: translateX(1219.2px); }
+#posx.X128 { transform: translateX(1228.8px); }
+#posx.X129 { transform: translateX(1238.4px); }
+#posx.X130 { transform: translateX(1248px); }
+#posx.X131 { transform: translateX(1257.6px); }
+#posx.X132 { transform: translateX(1267.2px); }
+#posx.X133 { transform: translateX(1276.8px); }
+#posx.X134 { transform: translateX(1286.4px); }
+#posx.X135 { transform: translateX(1296px); }
+#posx.X136 { transform: translateX(1305.6px); }
+#posx.X137 { transform: translateX(1315.2px); }
+#posx.X138 { transform: translateX(1324.8px); }
+#posx.X139 { transform: translateX(1334.4px); }
+#posx.X140 { transform: translateX(1344px); }
+#posx.X141 { transform: translateX(1353.6px); }
+#posx.X142 { transform: translateX(1363.2px); }
+#posx.X143 { transform: translateX(1372.8px); }
+#posx.X144 { transform: translateX(1382.4px); }
+#posx.X145 { transform: translateX(1392px); }
+#posx.X146 { transform: translateX(1401.6px); }
+#posx.X147 { transform: translateX(1411.2px); }
+#posx.X148 { transform: translateX(1420.8px); }
+#posx.X149 { transform: translateX(1430.4px); }
+#posx.X150 { transform: translateX(1440px); }
+#posx.X151 { transform: translateX(1449.6px); }
+#posx.X152 { transform: translateX(1459.2px); }
+#posx.X153 { transform: translateX(1468.8px); }
+#posx.X154 { transform: translateX(1478.4px); }
+#posx.X155 { transform: translateX(1488px); }
+#posx.X156 { transform: translateX(1497.6px); }
+#posx.X157 { transform: translateX(1507.2px); }
+#posx.X158 { transform: translateX(1516.8px); }
+#posx.X159 { transform: translateX(1526.4px); }
+#posx.X160 { transform: translateX(1536px); }
+#posx.X161 { transform: translateX(1545.6px); }
+#posx.X162 { transform: translateX(1555.2px); }
+#posx.X163 { transform: translateX(1564.8px); }
+#posx.X164 { transform: translateX(1574.4px); }
+#posx.X165 { transform: translateX(1584px); }
+#posx.X166 { transform: translateX(1593.6px); }
+#posx.X167 { transform: translateX(1603.2px); }
+#posx.X168 { transform: translateX(1612.8px); }
+#posx.X169 { transform: translateX(1622.4px); }
+#posx.X170 { transform: translateX(1632px); }
+#posx.X171 { transform: translateX(1641.6px); }
+#posx.X172 { transform: translateX(1651.2px); }
+#posx.X173 { transform: translateX(1660.8px); }
+#posx.X174 { transform: translateX(1670.4px); }
+#posx.X175 { transform: translateX(1680px); }
+#posx.X176 { transform: translateX(1689.6px); }
+#posx.X177 { transform: translateX(1699.2px); }
+#posx.X178 { transform: translateX(1708.8px); }
+#posx.X179 { transform: translateX(1718.4px); }
+#posx.X180 { transform: translateX(1728px); }
+#posx.X181 { transform: translateX(1737.6px); }
+#posx.X182 { transform: translateX(1747.2px); }
+#posx.X183 { transform: translateX(1756.8px); }
+#posx.X184 { transform: translateX(1766.4px); }
+#posx.X185 { transform: translateX(1776px); }
+#posx.X186 { transform: translateX(1785.6px); }
+#posx.X187 { transform: translateX(1795.2px); }
+#posx.X188 { transform: translateX(1804.8px); }
+#posx.X189 { transform: translateX(1814.4px); }
+#posx.X190 { transform: translateX(1824px); }
+#posx.X191 { transform: translateX(1833.6px); }
+#posx.X192 { transform: translateX(1843.2px); }
+#posx.X193 { transform: translateX(1852.8px); }
+#posx.X194 { transform: translateX(1862.4px); }
+#posx.X195 { transform: translateX(1872px); }
+#posx.X196 { transform: translateX(1881.6px); }
+#posx.X197 { transform: translateX(1891.2px); }
+#posx.X198 { transform: translateX(1900.8px); }
+#posx.X199 { transform: translateX(1910.4px); }
+#posx.X200 { transform: translateX(1920px); }
+#posy.Y0 { transform: translateY(0px); }
+#posy.Y1 { transform: translateY(5.4px); }
+#posy.Y2 { transform: translateY(10.8px); }
+#posy.Y3 { transform: translateY(16.2px); }
+#posy.Y4 { transform: translateY(21.6px); }
+#posy.Y5 { transform: translateY(27px); }
+#posy.Y6 { transform: translateY(32.4px); }
+#posy.Y7 { transform: translateY(37.8px); }
+#posy.Y8 { transform: translateY(43.2px); }
+#posy.Y9 { transform: translateY(48.6px); }
+#posy.Y10 { transform: translateY(54px); }
+#posy.Y11 { transform: translateY(59.4px); }
+#posy.Y12 { transform: translateY(64.8px); }
+#posy.Y13 { transform: translateY(70.2px); }
+#posy.Y14 { transform: translateY(75.6px); }
+#posy.Y15 { transform: translateY(81px); }
+#posy.Y16 { transform: translateY(86.4px); }
+#posy.Y17 { transform: translateY(91.8px); }
+#posy.Y18 { transform: translateY(97.2px); }
+#posy.Y19 { transform: translateY(102.6px); }
+#posy.Y20 { transform: translateY(108px); }
+#posy.Y21 { transform: translateY(113.4px); }
+#posy.Y22 { transform: translateY(118.8px); }
+#posy.Y23 { transform: translateY(124.2px); }
+#posy.Y24 { transform: translateY(129.6px); }
+#posy.Y25 { transform: translateY(135px); }
+#posy.Y26 { transform: translateY(140.4px); }
+#posy.Y27 { transform: translateY(145.8px); }
+#posy.Y28 { transform: translateY(151.2px); }
+#posy.Y29 { transform: translateY(156.6px); }
+#posy.Y30 { transform: translateY(162px); }
+#posy.Y31 { transform: translateY(167.4px); }
+#posy.Y32 { transform: translateY(172.8px); }
+#posy.Y33 { transform: translateY(178.2px); }
+#posy.Y34 { transform: translateY(183.6px); }
+#posy.Y35 { transform: translateY(189px); }
+#posy.Y36 { transform: translateY(194.4px); }
+#posy.Y37 { transform: translateY(199.8px); }
+#posy.Y38 { transform: translateY(205.2px); }
+#posy.Y39 { transform: translateY(210.6px); }
+#posy.Y40 { transform: translateY(216px); }
+#posy.Y41 { transform: translateY(221.4px); }
+#posy.Y42 { transform: translateY(226.8px); }
+#posy.Y43 { transform: translateY(232.2px); }
+#posy.Y44 { transform: translateY(237.6px); }
+#posy.Y45 { transform: translateY(243px); }
+#posy.Y46 { transform: translateY(248.4px); }
+#posy.Y47 { transform: translateY(253.8px); }
+#posy.Y48 { transform: translateY(259.2px); }
+#posy.Y49 { transform: translateY(264.6px); }
+#posy.Y50 { transform: translateY(270px); }
+#posy.Y51 { transform: translateY(275.4px); }
+#posy.Y52 { transform: translateY(280.8px); }
+#posy.Y53 { transform: translateY(286.2px); }
+#posy.Y54 { transform: translateY(291.6px); }
+#posy.Y55 { transform: translateY(297px); }
+#posy.Y56 { transform: translateY(302.4px); }
+#posy.Y57 { transform: translateY(307.8px); }
+#posy.Y58 { transform: translateY(313.2px); }
+#posy.Y59 { transform: translateY(318.6px); }
+#posy.Y60 { transform: translateY(324px); }
+#posy.Y61 { transform: translateY(329.4px); }
+#posy.Y62 { transform: translateY(334.8px); }
+#posy.Y63 { transform: translateY(340.2px); }
+#posy.Y64 { transform: translateY(345.6px); }
+#posy.Y65 { transform: translateY(351px); }
+#posy.Y66 { transform: translateY(356.4px); }
+#posy.Y67 { transform: translateY(361.8px); }
+#posy.Y68 { transform: translateY(367.2px); }
+#posy.Y69 { transform: translateY(372.6px); }
+#posy.Y70 { transform: translateY(378px); }
+#posy.Y71 { transform: translateY(383.4px); }
+#posy.Y72 { transform: translateY(388.8px); }
+#posy.Y73 { transform: translateY(394.2px); }
+#posy.Y74 { transform: translateY(399.6px); }
+#posy.Y75 { transform: translateY(405px); }
+#posy.Y76 { transform: translateY(410.4px); }
+#posy.Y77 { transform: translateY(415.8px); }
+#posy.Y78 { transform: translateY(421.2px); }
+#posy.Y79 { transform: translateY(426.6px); }
+#posy.Y80 { transform: translateY(432px); }
+#posy.Y81 { transform: translateY(437.4px); }
+#posy.Y82 { transform: translateY(442.8px); }
+#posy.Y83 { transform: translateY(448.2px); }
+#posy.Y84 { transform: translateY(453.6px); }
+#posy.Y85 { transform: translateY(459px); }
+#posy.Y86 { transform: translateY(464.4px); }
+#posy.Y87 { transform: translateY(469.8px); }
+#posy.Y88 { transform: translateY(475.2px); }
+#posy.Y89 { transform: translateY(480.6px); }
+#posy.Y90 { transform: translateY(486px); }
+#posy.Y91 { transform: translateY(491.4px); }
+#posy.Y92 { transform: translateY(496.8px); }
+#posy.Y93 { transform: translateY(502.2px); }
+#posy.Y94 { transform: translateY(507.6px); }
+#posy.Y95 { transform: translateY(513px); }
+#posy.Y96 { transform: translateY(518.4px); }
+#posy.Y97 { transform: translateY(523.8px); }
+#posy.Y98 { transform: translateY(529.2px); }
+#posy.Y99 { transform: translateY(534.6px); }
+#posy.Y100 { transform: translateY(540px); }
+#posy.Y101 { transform: translateY(545.4px); }
+#posy.Y102 { transform: translateY(550.8px); }
+#posy.Y103 { transform: translateY(556.2px); }
+#posy.Y104 { transform: translateY(561.6px); }
+#posy.Y105 { transform: translateY(567px); }
+#posy.Y106 { transform: translateY(572.4px); }
+#posy.Y107 { transform: translateY(577.8px); }
+#posy.Y108 { transform: translateY(583.2px); }
+#posy.Y109 { transform: translateY(588.6px); }
+#posy.Y110 { transform: translateY(594px); }
+#posy.Y111 { transform: translateY(599.4px); }
+#posy.Y112 { transform: translateY(604.8px); }
+#posy.Y113 { transform: translateY(610.2px); }
+#posy.Y114 { transform: translateY(615.6px); }
+#posy.Y115 { transform: translateY(621px); }
+#posy.Y116 { transform: translateY(626.4px); }
+#posy.Y117 { transform: translateY(631.8px); }
+#posy.Y118 { transform: translateY(637.2px); }
+#posy.Y119 { transform: translateY(642.6px); }
+#posy.Y120 { transform: translateY(648px); }
+#posy.Y121 { transform: translateY(653.4px); }
+#posy.Y122 { transform: translateY(658.8px); }
+#posy.Y123 { transform: translateY(664.2px); }
+#posy.Y124 { transform: translateY(669.6px); }
+#posy.Y125 { transform: translateY(675px); }
+#posy.Y126 { transform: translateY(680.4px); }
+#posy.Y127 { transform: translateY(685.8px); }
+#posy.Y128 { transform: translateY(691.2px); }
+#posy.Y129 { transform: translateY(696.6px); }
+#posy.Y130 { transform: translateY(702px); }
+#posy.Y131 { transform: translateY(707.4px); }
+#posy.Y132 { transform: translateY(712.8px); }
+#posy.Y133 { transform: translateY(718.2px); }
+#posy.Y134 { transform: translateY(723.6px); }
+#posy.Y135 { transform: translateY(729px); }
+#posy.Y136 { transform: translateY(734.4px); }
+#posy.Y137 { transform: translateY(739.8px); }
+#posy.Y138 { transform: translateY(745.2px); }
+#posy.Y139 { transform: translateY(750.6px); }
+#posy.Y140 { transform: translateY(756px); }
+#posy.Y141 { transform: translateY(761.4px); }
+#posy.Y142 { transform: translateY(766.8px); }
+#posy.Y143 { transform: translateY(772.2px); }
+#posy.Y144 { transform: translateY(777.6px); }
+#posy.Y145 { transform: translateY(783px); }
+#posy.Y146 { transform: translateY(788.4px); }
+#posy.Y147 { transform: translateY(793.8px); }
+#posy.Y148 { transform: translateY(799.2px); }
+#posy.Y149 { transform: translateY(804.6px); }
+#posy.Y150 { transform: translateY(810px); }
+#posy.Y151 { transform: translateY(815.4px); }
+#posy.Y152 { transform: translateY(820.8px); }
+#posy.Y153 { transform: translateY(826.2px); }
+#posy.Y154 { transform: translateY(831.6px); }
+#posy.Y155 { transform: translateY(837px); }
+#posy.Y156 { transform: translateY(842.4px); }
+#posy.Y157 { transform: translateY(847.8px); }
+#posy.Y158 { transform: translateY(853.2px); }
+#posy.Y159 { transform: translateY(858.6px); }
+#posy.Y160 { transform: translateY(864px); }
+#posy.Y161 { transform: translateY(869.4px); }
+#posy.Y162 { transform: translateY(874.8px); }
+#posy.Y163 { transform: translateY(880.2px); }
+#posy.Y164 { transform: translateY(885.6px); }
+#posy.Y165 { transform: translateY(891px); }
+#posy.Y166 { transform: translateY(896.4px); }
+#posy.Y167 { transform: translateY(901.8px); }
+#posy.Y168 { transform: translateY(907.2px); }
+#posy.Y169 { transform: translateY(912.6px); }
+#posy.Y170 { transform: translateY(918px); }
+#posy.Y171 { transform: translateY(923.4px); }
+#posy.Y172 { transform: translateY(928.8px); }
+#posy.Y173 { transform: translateY(934.2px); }
+#posy.Y174 { transform: translateY(939.6px); }
+#posy.Y175 { transform: translateY(945px); }
+#posy.Y176 { transform: translateY(950.4px); }
+#posy.Y177 { transform: translateY(955.8px); }
+#posy.Y178 { transform: translateY(961.2px); }
+#posy.Y179 { transform: translateY(966.6px); }
+#posy.Y180 { transform: translateY(972px); }
+#posy.Y181 { transform: translateY(977.4px); }
+#posy.Y182 { transform: translateY(982.8px); }
+#posy.Y183 { transform: translateY(988.2px); }
+#posy.Y184 { transform: translateY(993.6px); }
+#posy.Y185 { transform: translateY(999px); }
+#posy.Y186 { transform: translateY(1004.4px); }
+#posy.Y187 { transform: translateY(1009.8px); }
+#posy.Y188 { transform: translateY(1015.2px); }
+#posy.Y189 { transform: translateY(1020.6px); }
+#posy.Y190 { transform: translateY(1026px); }
+#posy.Y191 { transform: translateY(1031.4px); }
+#posy.Y192 { transform: translateY(1036.8px); }
+#posy.Y193 { transform: translateY(1042.2px); }
+#posy.Y194 { transform: translateY(1047.6px); }
+#posy.Y195 { transform: translateY(1053px); }
+#posy.Y196 { transform: translateY(1058.4px); }
+#posy.Y197 { transform: translateY(1063.8px); }
+#posy.Y198 { transform: translateY(1069.2px); }
+#posy.Y199 { transform: translateY(1074.6px); }
+#posy.Y200 { transform: translateY(1080px); }

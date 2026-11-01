@@ -39,6 +39,66 @@ $SessionPort = 29121
 $SessionPass = -join ((48..57) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
 $CfgFiles = "fd.cfg", "fd_actions.cfg", "fd_blank.cfg", "fd_fake.cfg", "fd_help.cfg", "fd_user.cfg", "fd_unfake.cfg", "gamemode_custom_server.cfg",
   "fd_ws.cfg", "fd_ws_list.cfg"
+$KeysFile = Join-Path $Data "keys.json"
+
+# Every action that has a key in fake mode: the command, the default key ("" = none), the launcher's text,
+# the line in fdhelp. Keys chosen in the launcher are kept in keys.json (only the changed ones), so a new
+# version keeps them; fd_user.cfg and fd_help.cfg get their key lines from here when the configs go in.
+$KeyActions = @(
+  @{ Cmd = "fm_menu";         Key = "h";         Group = "Меню и запись"; Text = "Меню FakeMimic (H-меню)";               Help = "FakeMimic menu (needs plugins)" }
+  @{ Cmd = "fm_rectoggle";    Key = "n";         Group = "Меню и запись"; Text = "Записать мувмент / сохранить";          Help = "record a movement / stop and save it" }
+  @{ Cmd = "fm_take";         Key = "F8";        Group = "Меню и запись"; Text = "Записать демку / остановить"; Help = "record a demo with the bots / stop it" }
+  @{ Cmd = "fd_stoprec";      Key = "DEL";       Group = "Меню и запись"; Text = "Остановить запись демки"; Help = "stop recording the demo" }
+  @{ Cmd = "fd_watchlast";    Key = "F9";        Group = "Меню и запись"; Text = "Смотреть последнюю демку папки";        Help = "watch the newest demo of the folder" }
+  @{ Cmd = "fm_bots";         Key = "l";         Group = "Боты";          Text = "Боты с мувментами: старт / стоп";       Help = "assigned bots start / stop" }
+  @{ Cmd = "fm_loop";         Key = "INS";       Group = "Боты";          Text = "Боты играют один раз / по кругу";       Help = "bots play once / in a loop" }
+  @{ Cmd = "fd_addt";         Key = ".";         Group = "Боты";          Text = "Добавить бота T";                       Help = "add a T bot (max 8)" }
+  @{ Cmd = "fd_addct";        Key = ",";         Group = "Боты";          Text = "Добавить бота CT";                      Help = "add a CT bot (max 8)" }
+  @{ Cmd = "fd_botkick";      Key = "BACKSPACE"; Group = "Боты";          Text = "Убрать всех ботов";                     Help = "remove all bots" }
+  @{ Cmd = "fd_botplace";     Key = "p";         Group = "Боты";          Text = "Поставить бота, куда смотришь";         Help = "place a bot where you aim" }
+  @{ Cmd = "fd_botstop";      Key = "o";         Group = "Боты";          Text = "Обычные боты: стоят / ходят";           Help = "bots stop / go" }
+  @{ Cmd = "fd_botkill";      Key = "k";         Group = "Боты";          Text = "Убить всех ботов";                      Help = "kill all bots" }
+  @{ Cmd = "fd_wallhack";     Key = "j";         Group = "Wallhack";      Text = "Боты сквозь стены";                     Help = "bots through walls on / off (needs plugins)" }
+  @{ Cmd = "fw_paths";        Key = "HOME";      Group = "Wallhack";      Text = "Пути мувментов";                        Help = "movement paths on / off" }
+  @{ Cmd = "fw_progress";     Key = "END";       Group = "Wallhack";      Text = "Пути: цвет по близости бота (Progress)"; Help = "path progress colours on / off" }
+  @{ Cmd = "fd_restart";      Key = "F1";        Group = "Игрок";         Text = "Рестарт раунда";                        Help = "restart round (everyone respawns)" }
+  @{ Cmd = "fd_kit1";         Key = "F2";        Group = "Игрок";         Text = "Набор AK (+ пистолет, гранаты, броня)"; Help = "AK kit" }
+  @{ Cmd = "fd_kit2";         Key = "F3";        Group = "Игрок";         Text = "Набор AWP (+ пистолет, гранаты, броня)"; Help = "AWP kit" }
+  @{ Cmd = "+fd_noclip";      Key = "v";         Group = "Игрок";         Text = "Noclip (держать)";                      Help = "hold: noclip" }
+  @{ Cmd = "fd_buddha";       Key = "t";         Group = "Игрок";         Text = "Бессмертие вкл / выкл";                 Help = "buddha on / off (you never die)" }
+  @{ Cmd = "fd_clear";        Key = "x";         Group = "Игрок";         Text = "Убрать красные кресты попаданий";       Help = "clear red debug crosses" }
+  @{ Cmd = "+fd_fast";        Key = "z";         Group = "Камера и время"; Text = "Скорость x10 (держать)";              Help = "hold: speed x10" }
+  @{ Cmd = "fd_speed_slow";   Key = "MOUSE5";    Group = "Камера и время"; Text = "Скорость x0.5";                       Help = "speed x0.5" }
+  @{ Cmd = "fd_speed_normal"; Key = "MOUSE4";    Group = "Камера и время"; Text = "Скорость x1";                         Help = "speed x1" }
+  @{ Cmd = "fd_cam";          Key = "RSHIFT";    Group = "Камера и время"; Text = "Камера: сзади / лицо / от первого лица"; Help = "3rd person behind / face / 1st person" }
+  @{ Cmd = "fd_maya";         Key = "ENTER";     Group = "Камера и время"; Text = "Maya-режим (мышь крутит модель)";     Help = "maya mode in 3rd person" }
+)
+
+# the actions with the keys in use now: the default, or the one chosen in the launcher ("" = no key)
+function Key-Binds {
+  $chosen = @{}
+  if (Test-Path $KeysFile) {
+    try { (Get-Content $KeysFile -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $chosen[$_.Name] = [string]$_.Value } } catch { }
+  }
+  foreach ($a in $KeyActions) {
+    $b = $a.Clone()
+    if ($chosen.ContainsKey($a.Cmd)) { $b.Key = $chosen[$a.Cmd] }
+    [pscustomobject]$b
+  }
+}
+
+function Save-KeyBinds($binds) {
+  $o = [ordered]@{}
+  foreach ($b in $binds) {
+    $def = ($KeyActions | Where-Object { $_.Cmd -eq $b.Cmd }).Key
+    if ($b.Key -ne $def) { $o[$b.Cmd] = $b.Key }
+  }
+  New-Item -ItemType Directory -Force $Data | Out-Null
+  [IO.File]::WriteAllText($KeysFile, (ConvertTo-Json $o), (New-Object Text.UTF8Encoding $false))
+}
+
+# every key fake mode binds: the actions' and the menu digits
+function Fake-Keys { @(Key-Binds | Where-Object Key | ForEach-Object Key) + @(1..9 | ForEach-Object { "$_" }) }
 
 function Log([string]$m) {
   Write-Host $m
@@ -172,7 +232,7 @@ function Build-Unfake($s, [string]$target) {
   $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
   $src = $acc.Keys
   # CS2 writes binds to the profile on its own (ESC menu), so after a fake session it may hold fd_ binds
-  if (Select-String -Path $src -Pattern '"[+-]?fd_|"fm_' -Quiet) {
+  if (Select-String -Path $src -Pattern '"[+-]?fd_|"fm_|"fw_' -Quiet) {
     if (-not (Test-Path $snapshot)) { throw "your Steam binds contain fake binds and there is no clean copy: type 'unfake' in game, close CS2, try again" }
     $src = $snapshot
   } else {
@@ -181,7 +241,7 @@ function Build-Unfake($s, [string]$target) {
   }
   $own = @{}
   foreach ($l in Get-Content $src) { if ($l -match '^\s*"([^"]+)"\s+"([^"]*)"\s*$') { $own[$Matches[1].ToUpper()] = $Matches[2] } }
-  $keys = Select-String -Path (Join-Path $Here "game\cfg\fd_user.cfg") -Pattern '^\s*bind\s+"([^"]+)"' | ForEach-Object { $_.Matches[0].Groups[1].Value }
+  $keys = Fake-Keys
   $out = @("// fd_unfake.cfg - generated by FakeDemo $Version from the Steam binds of account $($acc.Id)",
            "// puts your normal binds back on every key the fake config uses")
   foreach ($k in $keys) {
@@ -199,7 +259,7 @@ function Build-Unfake($s, [string]$target) {
 function Restore-OwnKeys($s) {
   if (Cs2-Running) { return }
   $acc = try { Pick-Account $s } catch { return }
-  if (-not (Select-String -Path $acc.Keys -Pattern '"[+-]?fd_|"fm_' -Quiet)) { return }
+  if (-not (Select-String -Path $acc.Keys -Pattern '"[+-]?fd_|"fm_|"fw_' -Quiet)) { return }
   $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
   $own = @{}
   if (Test-Path $snapshot) { foreach ($l in Get-Content $snapshot) { if ($l -match '^\s*"([^"]+)"\s+"([^"]*)"\s*$') { $own[$Matches[1].ToUpper()] = $Matches[2] } } }
@@ -207,7 +267,7 @@ function Restore-OwnKeys($s) {
   $n = 0
   $out = foreach ($l in [IO.File]::ReadAllLines($acc.Keys)) {
     $m = [regex]::Match($l, '^(\s*)"([^"]+)"(\s+)"([^"]*)"\s*$')
-    if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, '(^|[^a-z])[+-]?(fd_|fm_)')) {
+    if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, '(^|[^a-z])[+-]?(fd_|fm_|fw_)')) {
       $k = $m.Groups[2].Value; $n++
       $v = if ($own[$k.ToUpper()]) { $own[$k.ToUpper()] } else { "<unbound>" }
       "$($m.Groups[1].Value)`"$k`"$($m.Groups[3].Value)`"$v`""
@@ -219,8 +279,18 @@ function Restore-OwnKeys($s) {
 
 function Install-Cfg($s) {
   $cfg = Join-Path (Csgo $s) "cfg"
+  $binds = @(Key-Binds)
   foreach ($f in Get-ChildItem (Join-Path $Here "game\cfg\*.cfg")) {
     $text = [IO.File]::ReadAllText($f.FullName) -replace '\{\{VERSION\}\}', $Version
+    # the key lines from the launcher's choice
+    if ($f.Name -eq "fd_user.cfg") {
+      $lines = foreach ($b in $binds | Where-Object Key) { "bind `"$($b.Key)`" `"$($b.Cmd)`"" }
+      $text = $text.Replace("//{{BINDS}}", ($lines -join "`r`n"))
+    }
+    if ($f.Name -eq "fd_help.cfg") {
+      $lines = foreach ($b in $binds | Where-Object Key) { "echo `"  $($b.Key.ToUpper().PadRight(11)) $($b.Help)`"" }
+      $text = $text.Replace("//{{KEYS}}", ($lines -join "`r`n"))
+    }
     [IO.File]::WriteAllText((Join-Path $cfg $f.Name), $text)
   }
   Log "configs $Version copied to $cfg"

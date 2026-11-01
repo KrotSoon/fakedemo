@@ -58,6 +58,8 @@ public partial class FakeMimic
         public event Action<TakeInfo>? TakeStopped;
         public event Action<string>? RecordingStarted;
         public event Action<string>? RecordingStopped;
+        public event Action? BotsStarted;
+        public void RaiseBotsStarted() => BotsStarted?.Invoke();
         public void RaiseRecording(string name, bool started) => (started ? RecordingStarted : RecordingStopped)?.Invoke(name);
 
         public void RaiseStarted(TakeInfo info) => TakeStarted?.Invoke(info);
@@ -86,6 +88,14 @@ public partial class FakeMimic
         public string PlaySetup(string folder, IReadOnlyList<TakeBot> bots, Action? started) => plugin.PlaySetup(folder, bots, started);
 
         public void StopBots() => plugin.Halt();
+
+        public int ReplayTick(int botSlot)
+        {
+            var r = plugin._replays.FirstOrDefault(x => x.Bot is { IsValid: true } b && b.Slot == botSlot);
+            if (r == null || plugin._bc == null) return -1;
+            if (plugin._bc.IsReplaying(botSlot)) return plugin._bc.ReplayCursor(botSlot);
+            return r.Ended ? Math.Max(0, r.Length - 1) : 0;
+        }
 
         public ApiRoute? Route(string folder, string recording)
         {

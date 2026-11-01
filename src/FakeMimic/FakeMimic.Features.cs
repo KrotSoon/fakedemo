@@ -104,10 +104,12 @@ public partial class FakeMimic
             for (var i = 0; i < commands.Length; i++) commands[i].Yaw += e.Yaw;
         }
 
+        var buys = src.Buys;
         if (e.OffsetTicks < 0)
         {
             // skip the first ticks together with their subtick moves and command frames
             var skip = Math.Min(-e.OffsetTicks, Math.Max(0, ticks.Length - 1));
+            buys = buys.Select(b => (Math.Max(0, b.Tick - skip), b.Item)).ToList();   // skipped ones at the start
             var skipSubs = 0;
             for (var i = 0; i < skip; i++) skipSubs += (int)ticks[i].NumSubtick;
             ticks = ticks[skip..];
@@ -115,8 +117,37 @@ public partial class FakeMimic
             subs = subs[Math.Min(skipSubs, subs.Length)..];
         }
 
-        return new Recording { Team = src.Team, Weapons = src.Weapons, Ticks = ticks, Subs = subs, Commands = commands };
+        return new Recording { Team = src.Team, Weapons = src.Weapons, Ticks = ticks, Subs = subs, Commands = commands, Buys = buys };
     }
+
+    // ---------------- the map as it was before the bots ----------------
+    // Every start (once, each pass of a loop, a demo, a preview) clears what the last run left behind:
+    // dropped weapons, grenades in flight, fires, smokes, the bomb, bodies, broken glass, and the bullet holes
+    // and blood. Decals live in the game, not on the server, and the game drops all of them on round_start:
+    // that event alone is sent to the players (cl_removedecals only clears the one surface under the crosshair).
+    static readonly string[] Leftovers = { "inferno", "planted_c4", "smokegrenade_projectile", "hegrenade_projectile",
+        "flashbang_projectile", "molotov_projectile", "incgrenade_projectile", "decoy_projectile" };
+
+    void ClearMap()
+    {
+        var removed = 0;
+        foreach (var e in Utilities.GetAllEntities())
+        {
+            if (e is not { IsValid: true }) continue;
+            var name = e.DesignerName;
+            var dropped = name.StartsWith("weapon_") && e.As<CBasePlayerWeapon>().OwnerEntity.Value is not { IsValid: true };
+            if (!dropped && Array.IndexOf(Leftovers, name) < 0) continue;
+            e.Remove();
+            removed++;
+        }
+        Server.ExecuteCommand("ragdoll_cleanup_all; shatterglass_cleanup");
+        foreach (var p in Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, IsHLTV: false }))
+            new EventRoundStart(true).FireEventToClient(p);   // the game clears its decals
+        if (removed > 0) Server.PrintToConsole($"[FM] map cleared: {removed} leftovers");
+    }
+
+    [ConsoleCommand("fm_clearmap", "fm_clearmap - remove dropped weapons, grenades, bodies and decals (done on every start)")]
+    public void CmdClearMap(CCSPlayerController? caller, CommandInfo cmd) => ClearMap();
 
     // ---------------- takes ----------------
 
@@ -126,13 +157,13 @@ public partial class FakeMimic
     {
         var game = Path.GetFullPath(Path.Combine(Server.GameDirectory, "csgo"));
         var i = 1;
-        while (File.Exists(Path.Combine(game, $"{_category}_take{i}.dem"))) i++;
-        return $"{_category}_take{i}";
+        while (File.Exists(Path.Combine(game, $"{_category}_demo{i}.dem"))) i++;
+        return $"{_category}_demo{i}";
     }
 
     string StartTake()
     {
-        if (_take != null) return $"take '{_take}' is already running";
+        if (_take != null) return $"demo '{_take}' is already recording";
         if (_bc == null) return "CS2-Bot-Controller is not installed";
         ClearPaths();
         _take = NextTakeName();
@@ -144,20 +175,20 @@ public partial class FakeMimic
             Server.ExecuteCommand($"tv_record {name}");
             FireTakeStarted(name);
         });
-        return $"take '{name}': bots and demo started. H > Stop take (or DEL) to finish";
+        return $"demo '{name}': bots and recording started. H > Stop demo (or DEL) to finish";
     }
 
     string StopTake()
     {
         Server.ExecuteCommand("tv_stoprecord");
         Halt();
-        var msg = _take != null ? $"take '{_take}' saved: {_take}.dem" : "demo stopped";
+        var msg = _take != null ? $"demo saved: {_take}.dem" : "demo stopped";
         FireTakeStopped();
         _take = null;
         return msg;
     }
 
-    [ConsoleCommand("fm_take", "fm_take - start a take (all bots + demo), again to stop it")]
+    [ConsoleCommand("fm_take", "fm_take - record a demo (all bots play), again to stop it")]
     public void CmdTake(CCSPlayerController? caller, CommandInfo cmd) =>
         cmd.ReplyToCommand("[FM] " + (_take == null ? StartTake() : StopTake()));
 
