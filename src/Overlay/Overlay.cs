@@ -147,7 +147,7 @@ class OverlayForm : Form
         if (line[at + 4] != '.') return;
         var json = _json.ToString();
         _json.Clear();
-        if (json.Contains("\"closed\":true")) { _open = false; Hide(); _glass.Hide(); return; }
+        if (json.Contains("\"closed\":true")) { _open = false; Hide(); _glass.Hide(); CenterCursor(); return; }
         var x = Int(json, "x"); var y = Int(json, "y");
         if (!_open)
         {
@@ -157,6 +157,15 @@ class OverlayForm : Form
             FollowGame();
         }
         _web.CoreWebView2?.PostWebMessageAsJson(json);
+    }
+
+    // the game takes the mouse back a moment after the menu closes (FakeMimic waits for this); a cursor
+    // away from the middle (after an alt-tab) turned the view by that distance
+    static void CenterCursor()
+    {
+        if (!Native.IsGame(Native.GetForegroundWindow())) return;
+        var g = Native.GameRect();
+        Cursor.Position = new Point(g.Left + g.Width / 2, g.Top + g.Height / 2);
     }
 
     static int Int(string json, string key)

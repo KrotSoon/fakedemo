@@ -17,6 +17,7 @@ static class Portraits
 
     public static void Extract(string dir)
     {
+        Fill(dir);
         try
         {
             var pak = PakFile();
@@ -34,6 +35,56 @@ static class Portraits
             }
         }
         catch (Exception) { /* no game files */ }
+        Fill(dir);
+    }
+
+    // before the game's files are read too: the pictures from an earlier run are there already
+    static void Fill(string dir)
+    {
+        try { FillOutline(Path.Combine(dir, "ct_map_based.png")); }
+        catch (Exception) { /* the outline stays */ }
+    }
+
+    // The game's CT "map-based agent" is a thin dark outline on a wide transparent picture: on the dark card it
+    // looked empty. Made a square filled silhouette in the tone of the T one (which is filled), once: a picture
+    // whose centre is already opaque is left alone
+    static void FillOutline(string file)
+    {
+        if (!File.Exists(file)) return;
+        Bitmap src;
+        using (var f = new Bitmap(file)) src = new Bitmap(f);
+        using (src)
+        {
+            int w = src.Width, h = src.Height;
+            if (src.GetPixel(w / 2, h / 2).A >= 128) return;
+            // transparent pixels reachable from the edge are outside the figure, the rest is the figure
+            var outside = new bool[w, h];
+            var queue = new Queue<Point>();
+            void Push(int x, int y)
+            {
+                if (x < 0 || y < 0 || x >= w || y >= h || outside[x, y] || src.GetPixel(x, y).A >= 128) return;
+                outside[x, y] = true;
+                queue.Enqueue(new Point(x, y));
+            }
+            for (int x = 0; x < w; x++) { Push(x, 0); Push(x, h - 1); }
+            for (int y = 0; y < h; y++) { Push(0, y); Push(w - 1, y); }
+            while (queue.Count > 0)
+            {
+                var p = queue.Dequeue();
+                Push(p.X + 1, p.Y); Push(p.X - 1, p.Y); Push(p.X, p.Y + 1); Push(p.X, p.Y - 1);
+            }
+            var side = Math.Min(w, h);
+            int left = (w - side) / 2, top = (h - side) / 2;
+            var fill = Color.FromArgb(255, 52, 62, 78);
+            using var square = new Bitmap(side, side, PixelFormat.Format32bppArgb);
+            for (int y = 0; y < side; y++)
+                for (int x = 0; x < side; x++)
+                {
+                    var a = outside[left + x, top + y] ? src.GetPixel(left + x, top + y).A : 255;   // keeps the edge smooth
+                    square.SetPixel(x, y, Color.FromArgb(a, fill));
+                }
+            square.Save(file, ImageFormat.Png);
+        }
     }
 
     static string? PakFile()

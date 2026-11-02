@@ -205,7 +205,7 @@ function row(r, n, rows) {
     r.cards.forEach((c, i) => {
       const s = el("div", "Card" + (c.ct ? " CT" : "") + (r.sel === i ? " Sel" : ""));
       const p = el("div", "Portrait");
-      p.style.backgroundImage = `url("https://fm.portraits/${c.p}.png")`;
+      p.style.backgroundImage = `url("https://fm.portraits/${c.p}.png?2")`;   // ?2: the filled CT picture, not the cached outline
       s.append(p, el("div", "CardName", c.t), el("div", "CardSub", c.s));
       s.onclick = () => click(`c${n}_${i}`);
       o.append(s);

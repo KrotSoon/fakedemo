@@ -28,6 +28,7 @@ using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Extensions;
+using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
 using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.ValveConstants.Protobuf;
 
@@ -133,7 +134,7 @@ class Replay
     public RecordingEdits Edits = new();   // timing, path transform, deaths (FakeMimic.Features.cs)
     public CCSPlayerController? Bot;
     public bool Running;      // StartReplay was called and the end was not reached yet
-    public int LastWeaponDef;
+    public int WrongWeapon;   // ticks the bot has held another weapon than the recording
     public List<(int Tick, string Item)> Buys = new();   // of the prepared recording
     public int NextBuy;
     public bool Ended;        // played to the end since the last start
@@ -227,11 +228,13 @@ public partial class FakeMimic : BasePlugin
     static CCSPlayerController? LocalHuman() =>
         FakeDemoPlayers.All().FirstOrDefault(p => p is { IsValid: true, IsBot: false, IsHLTV: false });
 
-    // replay drives movement, view and buttons; weapons are switched here from the replayed tick,
-    // and a bot that reached the end is frozen in place (otherwise its AI walks away)
+    // replay drives movement, view, buttons and weapon switches; purchases are given here (and a wrong
+    // weapon fixed), and a bot that reached the end is frozen in place (otherwise its AI walks away)
     void OnTick()
     {
         CheckOverlay();
+        WaitCapture();
+        ShowGiven();
         if (_bc == null) return;
         foreach (var r in _replays)
         {
@@ -244,19 +247,104 @@ public partial class FakeMimic : BasePlugin
                 OnReplayEnd(r);
                 continue;
             }
-            // purchases at the tick they were made, before the weapon switch of that tick
+            // purchases BuyLeadTicks before the recorded one: the player had the weapon in hand a tick before
+            // item_purchase came, and CS2-Bot-Controller picks up the recorded weapon only in the tick it changed
+            // (a weapon given later stayed in the bag: the bot shot the whole movement with its pistol)
             if (r.NextBuy < r.Buys.Count)
             {
-                var at = _bc.ReplayCursor(slot);
+                var at = _bc.ReplayCursor(slot) + BuyLeadTicks;
                 while (r.NextBuy < r.Buys.Count && r.Buys[r.NextBuy].Tick <= at) Buy(r.Bot, r.Buys[r.NextBuy++].Item);
             }
-            if (_bc.TryGetReplayTick(slot, out var tick) && tick.WeaponDefIndex > 0 && tick.WeaponDefIndex != r.LastWeaponDef
-                && _bc.BotActiveWeaponDef(slot) != tick.WeaponDefIndex)
-            {
-                r.LastWeaponDef = tick.WeaponDefIndex;
-                _bc.SwitchBotWeapon(slot, tick.WeaponDefIndex);
-            }
+            KeepWeapon(r, slot);
         }
+    }
+
+    // a given weapon reaches the inventory a tick later; the recorded switch must find it there
+    const int BuyLeadTicks = 6;
+    // a switch later than the recording's delays every shot of that weapon by as much (it is being drawn)
+    const int WrongWeaponTicks = 1, SelectTries = 128;
+
+    // The replay selects the recorded weapon itself in the tick the recording changed it, but a weapon bought
+    // during the replay stayed in the bag (the bot shot the whole movement with its pistol), and
+    // SwitchBotWeapon and a "use" command are refused while replaying. A bot still holding another weapon a
+    // few ticks later gets it through the game's own CCSPlayer_WeaponServices::SelectItem, the function
+    // CS2-Bot-Controller switches with (signature from its gamedata.json, kept up to date with CS2).
+    void KeepWeapon(Replay r, int slot)
+    {
+        if (!_bc!.TryGetReplayTick(slot, out var tick) || tick.WeaponDefIndex <= 0 || _bc.BotActiveWeaponDef(slot) == tick.WeaponDefIndex)
+        {
+            r.WrongWeapon = 0;
+            return;
+        }
+        if (++r.WrongWeapon < WrongWeaponTicks) return;
+        // a bought weapon reaches the bot's inventory some ticks after it was given: looked for every tick
+        var ws = r.Bot!.PlayerPawn.Value?.WeaponServices;
+        var weapon = ws?.MyWeapons.Select(h => h.Value)
+            .FirstOrDefault(w => w is { IsValid: true } && w.AttributeManager.Item.ItemDefinitionIndex == tick.WeaponDefIndex);
+        if (ws == null || r.WrongWeapon > WrongWeaponTicks + SelectTries) return;
+        // the recording holds a gun the bot never got: a purchase without item_purchase or a weapon picked up
+        // from the ground. Given once, as a purchase; the next ticks select it
+        if (weapon == null)
+        {
+            if (r.WrongWeapon == WrongWeaponTicks && GunName(tick.WeaponDefIndex) is { } name) Buy(r.Bot, name);
+            return;
+        }
+        SelectItem(ws, weapon);
+    }
+
+    // item definition index -> gun (CsItem does not follow the indexes: its 9 is the bump mine)
+    static readonly Dictionary<int, string> Guns = new()
+    {
+        [1] = "deagle", [2] = "elite", [3] = "fiveseven", [4] = "glock", [7] = "ak47", [8] = "aug", [9] = "awp",
+        [10] = "famas", [11] = "g3sg1", [13] = "galilar", [14] = "m249", [16] = "m4a1", [17] = "mac10", [19] = "p90",
+        [23] = "mp5sd", [24] = "ump45", [25] = "xm1014", [26] = "bizon", [27] = "mag7", [28] = "negev", [29] = "sawedoff",
+        [30] = "tec9", [32] = "hkp2000", [33] = "mp7", [34] = "mp9", [35] = "nova", [36] = "p250", [38] = "scar20",
+        [39] = "sg556", [40] = "ssg08", [60] = "m4a1_silencer", [61] = "usp_silencer", [63] = "cz75a", [64] = "revolver",
+    };
+
+    static string? GunName(int def) => Guns.TryGetValue(def, out var n) ? "weapon_" + n : null;
+
+    // the purchases plus a purchase for every gun the recording takes in hand without having it (bought
+    // without item_purchase, picked up), so it is given BuyLeadTicks early like a purchase
+    static List<(int Tick, string Item)> WithMissingGuns(Recording rec)
+    {
+        var have = rec.Weapons.ToHashSet();
+        var buys = rec.Buys.ToList();
+        for (int i = 0, next = 0, last = -1; i < rec.Ticks.Length; i++)
+        {
+            for (; next < rec.Buys.Count && rec.Buys[next].Tick <= i; next++) have.Add(rec.Buys[next].Item);
+            var def = rec.Ticks[i].WeaponDefIndex;
+            if (def == last) continue;
+            last = def;
+            if (GunName(def) is { } name && have.Add(name)) buys.Add((i, name));
+        }
+        return buys.OrderBy(b => b.Tick).ToList();
+    }
+
+    static MemoryFunctionVoid<nint, nint, int>? _selectItem;
+    static bool _selectItemFailed;
+
+    void SelectItem(CPlayer_WeaponServices ws, CBasePlayerWeapon weapon)
+    {
+        if (_selectItemFailed) return;
+        try
+        {
+            _selectItem ??= new MemoryFunctionVoid<nint, nint, int>(SelectItemSignature());
+            _selectItem.Invoke(ws.Handle, weapon.Handle, 0);
+        }
+        catch (Exception e)
+        {
+            _selectItemFailed = true;   // once: a wrong signature after a CS2 update must not repeat every tick
+            Logger.LogError("weapon switch during replay unavailable: {Error}", e.Message);
+        }
+    }
+
+    // "CCSPlayer_WeaponServices::SelectItem" from addons/BotController/gamedata.json
+    static string SelectItemSignature()
+    {
+        var gamedata = Path.Combine(Server.GameDirectory, "csgo", "addons", "BotController", "gamedata.json");
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(gamedata));
+        return doc.RootElement.GetProperty("CCSPlayer_WeaponServices::SelectItem").GetProperty("signatures").GetProperty("windows").GetString()!;
     }
 
     // ---------------- purchases ----------------
@@ -304,9 +392,48 @@ public partial class FakeMimic : BasePlugin
     {
         if (bot.PlayerPawn.Value?.WeaponServices is not { } ws) return;
         bool Same(string held) => Primary(item) ? Primary(held) : Pistols.Contains(item) && Pistols.Contains(held);
-        foreach (var held in ws.MyWeapons.Select(h => h.Value?.DesignerName).OfType<string>().Where(Same).ToList())
-            bot.RemoveItemByDesignerName(held, true);
-        bot.GiveNamedItem(item);
+        // removed at once: RemoveItemByDesignerName took 7 ticks, and meanwhile the new weapon lay on the
+        // ground (hanging in the air in front of the bot, "[F] swap to AWP" for the player near it) until the
+        // slot was free
+        foreach (var held in ws.MyWeapons.Select(h => h.Value).Where(w => w is { IsValid: true } && Same(w.DesignerName)).ToList())
+            held!.Remove();
+        var given = bot.GiveNamedItem(item);
+        if (given == 0) return;
+        // it still reaches the inventory a tick later: invisible until it is in the bot's weapons
+        var weapon = new CBasePlayerWeapon(given);
+        weapon.RenderMode = RenderMode_t.kRenderTransAlpha;
+        weapon.Render = System.Drawing.Color.FromArgb(0, weapon.Render);
+        Utilities.SetStateChanged(weapon, "CBaseModelEntity", "m_nRenderMode");
+        Utilities.SetStateChanged(weapon, "CBaseModelEntity", "m_clrRender");
+        _hiddenGiven.Add(new HiddenGiven(bot, weapon, Server.TickCount));
+    }
+
+    class HiddenGiven(CCSPlayerController bot, CBasePlayerWeapon weapon, int tick)
+    {
+        public CCSPlayerController Bot = bot;
+        public CBasePlayerWeapon Weapon = weapon;
+        public int Tick = tick, Owned = -1;
+    }
+
+    readonly List<HiddenGiven> _hiddenGiven = new();
+    // shown some ticks after it reached the bot: right away it still flashed for a frame where it was made
+    const int HiddenGivenMaxTicks = 32, ShowGivenAfterTicks = 3;
+
+    void ShowGiven()
+    {
+        _hiddenGiven.RemoveAll(h =>
+        {
+            if (!h.Weapon.IsValid) return true;
+            if (h.Owned < 0 && h.Bot.IsValid && h.Bot.PlayerPawn.Value?.WeaponServices?.MyWeapons.Any(w => w.Value?.Handle == h.Weapon.Handle) == true)
+                h.Owned = Server.TickCount;
+            var ready = h.Owned >= 0 && Server.TickCount - h.Owned >= ShowGivenAfterTicks;
+            if (!ready && Server.TickCount - h.Tick < HiddenGivenMaxTicks) return false;
+            h.Weapon.RenderMode = RenderMode_t.kRenderNormal;
+            h.Weapon.Render = System.Drawing.Color.FromArgb(255, h.Weapon.Render);
+            Utilities.SetStateChanged(h.Weapon, "CBaseModelEntity", "m_nRenderMode");
+            Utilities.SetStateChanged(h.Weapon, "CBaseModelEntity", "m_clrRender");
+            return true;
+        });
     }
 
     // ---------------- actions (shared by console commands and the menu) ----------------
@@ -485,9 +612,9 @@ public partial class FakeMimic : BasePlugin
                 var bot = r.Bot!;
                 var pawn = bot.PlayerPawn.Value;
                 if (bot is not { IsValid: true } || pawn == null) continue;
-                r.LastWeaponDef = 0;
+                r.WrongWeapon = 0;
                 var rec = Prepare(r.Rec, r.Edits);
-                (r.Buys, r.NextBuy, r.Ended, r.Length) = (rec.Buys, 0, false, rec.Ticks.Length);
+                (r.Buys, r.NextBuy, r.Ended, r.Length) = (WithMissingGuns(rec), 0, false, rec.Ticks.Length);
                 // without the history if this CS2-Bot-Controller does not take it (another build than the recording's)
                 if (!_bc.SetReplayPawn(bot.Slot, pawn.Handle))
                 {
@@ -738,7 +865,7 @@ public partial class FakeMimic : BasePlugin
         hud.SetHasClass("menu", "Settings", false);
         _inOverlay = Overlay;
         hud.SetHasClass("menu", "Hidden", _inOverlay);
-        hud.SetInputCaptureEnabled(p, true);   // with the overlay too: the game frees the cursor
+        StartCapture(p);   // with the overlay too: the game frees the cursor
         if (_inOverlay) Emit(m);
     }
 
@@ -851,17 +978,65 @@ public partial class FakeMimic : BasePlugin
         hud.SetHasClass("menu", "SwapB", _swapB);
     }
 
+    // A mouse still moving when H was pressed turned the view by 1-11° when the menu closed (or later): the
+    // game holds back the movement that was under way when the cursor was freed and applies it when the
+    // mouse comes back. The menu shows at once, but the cursor is freed only when the view stopped turning
+    // (the mouse is still), at most CaptureWaitMs later; until then the mouse still turns the view.
+    // Real milliseconds, not ticks: in slow motion 20 ticks were over a second
+    CCSPlayerController? _captureFor;
+    QAngle? _captureView;
+    long _captureSince, _stillSince;
+    const int CaptureWaitMs = 120, CaptureStillMs = 25;
+    const float StillDegrees = 0.01f;
+
+    void StartCapture(CCSPlayerController p)
+    {
+        if (_captureFor != null) return;   // already waiting; the menu was only redrawn
+        if (_capturing) { _hud?.SetInputCaptureEnabled(p, true); return; }
+        (_captureFor, _captureView, _captureSince, _stillSince) = (p, null, Environment.TickCount64, -1);
+    }
+
+    bool _capturing;
+
+    void WaitCapture()
+    {
+        if (_captureFor is not { } p) return;
+        if (!p.IsValid || _menu == null || _hud is not { IsValid: true } hud) { _captureFor = null; return; }
+        var v = p.PlayerPawn.Value?.V_angle;
+        var still = v != null && _captureView != null
+            && Math.Abs(v.X - _captureView.X) < StillDegrees && Math.Abs(v.Y - _captureView.Y) < StillDegrees;
+        var now = Environment.TickCount64;
+        if (!still) _stillSince = -1;
+        else if (_stillSince < 0) _stillSince = now;
+        if (v != null) _captureView = new QAngle(v.X, v.Y, v.Z);
+        if ((_stillSince < 0 || now - _stillSince < CaptureStillMs) && now - _captureSince < CaptureWaitMs) return;
+        hud.SetInputCaptureEnabled(p, true);
+        _capturing = true;
+        _captureFor = null;
+    }
+
     void CloseMenu(CCSPlayerController p)
     {
+        _captureFor = null;
+        _capturing = false;
         _menu = null;
         if (_grid != 0) SetGrid(0);
         SetDigits(false);
-        if (_inOverlay) EmitRaw("{\"closed\":true}");
+        var overlay = _inOverlay;
+        if (overlay) EmitRaw("{\"closed\":true}");
         _inOverlay = false;
         if (_hud is not { IsValid: true }) return;
         _hud.SetHasClass("menu", "Hidden", true);
-        _hud.SetInputCaptureEnabled(p, false);
+        if (!overlay) { _hud.SetInputCaptureEnabled(p, false); return; }
+        // the overlay puts the cursor in the middle of the game first (after an alt-tab it was elsewhere,
+        // and the game turned the view by the distance when it took the mouse back)
+        Task.Delay(OverlayCenterMs).ContinueWith(_ => Server.NextFrame(() =>
+        {
+            if (_menu == null && p.IsValid && _hud is { IsValid: true } hud) hud.SetInputCaptureEnabled(p, false);
+        }));
     }
+
+    const int OverlayCenterMs = 40;
 
     // Layout development: a changed vxml_c / vcss_c is never read again while the game runs (not on a
     // map load, not with resource_repeated_reload), so each build gets a new file name
