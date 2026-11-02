@@ -650,7 +650,6 @@ public partial class FakeMimic
         var e = EditsOf(name);
         Show(p, new Menu($"{name}: path and death", new List<MenuItem>
         {
-            new("Show path (20 s)", pl => { Say(pl, ShowPath(name)); PathMenu(pl, name); }),
             new("Put path here (my spot and view)", pl => { Say(pl, PutPathHere(name)); PathMenu(pl, name); }),
             new("Path back to where it was recorded", pl => { Say(pl, ResetPath(name)); PathMenu(pl, name); }),
             new($"Die at end: {(e.DieAtEnd ? "yes" : "no")}", pl => { Say(pl, ToggleDieAtEnd(name)); PathMenu(pl, name); }),
