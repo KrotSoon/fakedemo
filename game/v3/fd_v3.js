@@ -3,7 +3,7 @@
     // =====================================================================
     //  fd_v3.js  -  FakeDemo + V3 (HLAE mirv-script, loaded by fd_hlae.cfg)
     //  The keys of fake mode and of V3 overlap, so they are never on together:
-    //  a demo starts  -> your own binds (fd_unfake), then V3 ('exec v3; fe')
+    //  a demo starts  -> your own binds (fd_unfake), then V3 ('exec v3; fe'), then your HLAE configs (fd_hlae_own)
     //  the demo ends  -> V3 off ('reset' = v3_reset -> fd_unfake), then fake mode ('fake')
     //  fd_v3_off / fd_v3_on: stop / start doing this
     // =====================================================================
@@ -30,7 +30,7 @@
             if (st.waitTick < 0) { st.waitTick = tick; return; }
             if (tick === st.waitTick) return;
             st.inDemo = true; st.waitTick = -1;
-            run('exec fd_unfake; exec v3; fe');
+            run('exec fd_unfake; exec v3; fe; exec fd_hlae_own');
             msg('demo: V3 keys on (fehelp). Fake mode keys come back when the demo ends');
         } else if (!playing) {
             st.waitTick = -1;

@@ -488,83 +488,107 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
       <!-- ===== settings ===== -->
       <StackPanel x:Name="Settings" Visibility="Collapsed">
-        <TextBlock Style="{StaticResource Caption}" Text="Папка CS2" Margin="2,0,0,4"/>
-        <DockPanel>
-          <Button x:Name="BtnBrowse" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="Обзор" Margin="8,0,0,0"/>
-          <TextBox x:Name="TbCs2" Style="{StaticResource Field}" IsReadOnly="True"/>
-        </DockPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,-6,0,10">
+          <RadioButton x:Name="SetGame" Style="{StaticResource Chip}" GroupName="settab" Content="Игра"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+          <RadioButton x:Name="SetFake" Style="{StaticResource Chip}" GroupName="settab" Content="Fake"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+          <RadioButton x:Name="SetHlae" Style="{StaticResource Chip}" GroupName="settab" Content="HLAE"><RadioButton.RenderTransform><ScaleTransform/></RadioButton.RenderTransform></RadioButton>
+        </StackPanel>
 
-        <TextBlock Style="{StaticResource Caption}" Text="Аккаунт Steam (бинды для unfake, права в плагинах)"/>
-        <WrapPanel x:Name="Accounts" Margin="0,-6,0,0"/>
-
-        <TextBlock Style="{StaticResource Caption}" Text="Свои параметры запуска"/>
-        <TextBox x:Name="TbOptions" Style="{StaticResource Field}"/>
-        <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="-insecure добавляется сам, когда включены плагины"/>
-
-        <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+        <!-- game: where it is, whose binds, how it starts -->
+        <StackPanel x:Name="PageGame">
+          <TextBlock Style="{StaticResource Caption}" Text="Папка CS2" Margin="2,0,0,4"/>
           <DockPanel>
-            <CheckBox x:Name="SwExecFd" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
-            <StackPanel>
-              <TextBlock Style="{StaticResource Label}" Text="exec fd при запуске"/>
-              <TextBlock Style="{StaticResource Hint}" Text="GOTV и режим custom включаются сразу, в главном меню"/>
-            </StackPanel>
+            <Button x:Name="BtnBrowse" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="Обзор" Margin="8,0,0,0"/>
+            <TextBox x:Name="TbCs2" Style="{StaticResource Field}" IsReadOnly="True"/>
           </DockPanel>
-        </Border>
 
-        <Border Style="{StaticResource Card}" Margin="0,8,0,0">
-          <DockPanel>
-            <CheckBox x:Name="SwHlae" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
-            <StackPanel>
-              <TextBlock Style="{StaticResource Label}" Text="Запуск через HLAE"/>
-              <TextBlock x:Name="HlaeHint" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
-            </StackPanel>
-          </DockPanel>
-        </Border>
+          <TextBlock Style="{StaticResource Caption}" Text="Аккаунт Steam (бинды для unfake, права в плагинах)"/>
+          <WrapPanel x:Name="Accounts" Margin="0,-6,0,0"/>
 
-        <TextBlock Style="{StaticResource Caption}" Text="Папка записи HLAE (конфиг V3)"/>
-        <DockPanel>
-          <Button x:Name="BtnRecDir" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="Обзор" Margin="8,0,0,0"/>
-          <TextBox x:Name="TbRecDir" Style="{StaticResource Field}" IsReadOnly="True"/>
-        </DockPanel>
-        <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" TextWrapping="Wrap" Text="в демке через HLAE сам включается V3 (fehelp — клавиши), после демки возвращаются клавиши fake"/>
+          <TextBlock Style="{StaticResource Caption}" Text="Свои параметры запуска"/>
+          <TextBox x:Name="TbOptions" Style="{StaticResource Field}"/>
+          <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="-insecure добавляется сам, когда включены плагины или HLAE"/>
 
-        <Grid>
-          <Grid.ColumnDefinitions><ColumnDefinition Width="118"/><ColumnDefinition/></Grid.ColumnDefinitions>
-          <TextBlock Style="{StaticResource Caption}" Text="Порт netcon"/>
-          <TextBlock Grid.Column="1" Style="{StaticResource Caption}" Text="Пароль"/>
-        </Grid>
-        <Grid>
-          <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
-          <TextBox x:Name="TbPort" Style="{StaticResource Field}"/>
-          <TextBox x:Name="TbPass" Grid.Column="2" Style="{StaticResource Field}"/>
-        </Grid>
-        <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="для HLAE-инструментов; порт 0 = выключено"/>
+          <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+            <DockPanel>
+              <CheckBox x:Name="SwExecFd" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+              <StackPanel>
+                <TextBlock Style="{StaticResource Label}" Text="exec fd при запуске"/>
+                <TextBlock Style="{StaticResource Hint}" Text="GOTV и режим custom включаются сразу, в главном меню"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Button x:Name="BtnShortcut" Margin="-6,10,0,0" HorizontalAlignment="Left" Style="{StaticResource Link}" Content="Ярлык FakeDemo на рабочий стол"/>
+        </StackPanel>
 
-        <Border x:Name="KeysCard" Style="{StaticResource ClickCard}" Margin="0,12,0,0" Padding="12,10">
-          <DockPanel>
-            <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
-            <StackPanel>
-              <TextBlock Style="{StaticResource Label}" Text="Клавиши fake-режима"/>
-              <TextBlock x:Name="KeysHint" Style="{StaticResource Hint}"/>
-            </StackPanel>
-          </DockPanel>
-        </Border>
+        <!-- fake mode: keys and configs -->
+        <StackPanel x:Name="PageFake" Visibility="Collapsed">
+          <Border x:Name="KeysCard" Style="{StaticResource ClickCard}" Padding="12,10">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
+              <StackPanel>
+                <TextBlock Style="{StaticResource Label}" Text="Клавиши fake-режима"/>
+                <TextBlock x:Name="KeysHint" Style="{StaticResource Hint}"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
 
-        <Border x:Name="CfgCard" Style="{StaticResource ClickCard}" Margin="0,8,0,0" Padding="12,10">
-          <DockPanel>
-            <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
-            <StackPanel>
-              <TextBlock Style="{StaticResource Label}" Text="Свои конфиги"/>
-              <TextBlock x:Name="CfgHint" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
-            </StackPanel>
-          </DockPanel>
-        </Border>
+          <Border x:Name="CfgCard" Style="{StaticResource ClickCard}" Margin="0,8,0,0" Padding="12,10">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
+              <StackPanel>
+                <TextBlock Style="{StaticResource Label}" Text="Fake-конфиги"/>
+                <TextBlock x:Name="CfgHint" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Button x:Name="BtnBinds" Margin="-6,10,0,0" HorizontalAlignment="Left" Style="{StaticResource Link}" Content="Обновить бинды для unfake"/>
+        </StackPanel>
 
-        <Button x:Name="BtnShortcut" Margin="-6,10,0,0" HorizontalAlignment="Left" Style="{StaticResource Link}" Content="Ярлык FakeDemo на рабочий стол"/>
-        <DockPanel Margin="-6,4,-6,0">
-          <Button x:Name="BtnBinds" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Обновить бинды для unfake"/>
-          <Button x:Name="BtnBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
-        </DockPanel>
+        <!-- HLAE: the switch, the rest only when it is on -->
+        <StackPanel x:Name="PageHlae" Visibility="Collapsed">
+          <Border Style="{StaticResource Card}">
+            <DockPanel>
+              <CheckBox x:Name="SwHlae" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+              <StackPanel>
+                <TextBlock Style="{StaticResource Label}" Text="Запуск через HLAE"/>
+                <TextBlock x:Name="HlaeHint" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <StackPanel x:Name="HlaeMore">
+            <TextBlock Style="{StaticResource Caption}" Text="Папка записи (V3 включается в демке сам, клавиши — fehelp)"/>
+            <DockPanel>
+              <Button x:Name="BtnRecDir" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="Обзор" Margin="8,0,0,0"/>
+              <TextBox x:Name="TbRecDir" Style="{StaticResource Field}" IsReadOnly="True"/>
+            </DockPanel>
+
+            <Border x:Name="HlaeCfgCard" Style="{StaticResource ClickCard}" Margin="0,12,0,0" Padding="12,10">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Label}" Text="HLAE-конфиги"/>
+                  <TextBlock x:Name="HlaeCfgHint" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+          </StackPanel>
+
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="118"/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <TextBlock Style="{StaticResource Caption}" Text="Порт netcon"/>
+            <TextBlock Grid.Column="1" Style="{StaticResource Caption}" Text="Пароль"/>
+          </Grid>
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <TextBox x:Name="TbPort" Style="{StaticResource Field}"/>
+            <TextBox x:Name="TbPass" Grid.Column="2" Style="{StaticResource Field}"/>
+          </Grid>
+          <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="для HLAE-инструментов; порт 0 = выключено"/>
+        </StackPanel>
+
+        <Button x:Name="BtnBack" Margin="-6,10,0,0" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
       </StackPanel>
     </StackPanel>
   </Border>
@@ -669,6 +693,8 @@ function Update-HlaeHint {
   (El "SwHlae").IsEnabled = [bool]$h -or [bool]$script:s.Hlae
   (El "HlaeHint").Text = $(if ($h) { "игра и демки с HLAE (mirv_streams для слоёв), всегда с -insecure · $(Split-Path $h)" }
     else { "HLAE не найден: поставь его с advancedfx.org (в Program Files\HLAE)" })
+  # the recording folder and HLAE configs only matter with HLAE on
+  (El "HlaeMore").Visibility = $(if ($script:s.Hlae) { "Visible" } else { "Collapsed" })
 }
 
 # what Play will do, in one line under the button
@@ -1132,7 +1158,7 @@ function Update-KeysCard {
   $b = @(Key-Binds)
   $changed = @($b | Where-Object { $x = $_; $x.Key -ne ($KeyActions | Where-Object { $_.Cmd -eq $x.Cmd }).Key }).Count
   (El "KeysHint").Text = "$($b.Count) действий: меню, запись, боты, Wallhack…$(if ($changed) { " · изменено: $changed" })"
-  Update-CfgCard
+  Update-CfgCard; Update-HlaeCfgCard
 }
 
 # your own configs (fakedemo.ps1 Install-UserCfgs copies them into the game on Play)
@@ -1144,6 +1170,17 @@ function Update-CfgCard {
 }
 
 function Open-UserCfgs { Ensure-UserCfgDir; Start-Process explorer.exe $UserCfgDir }
+
+function Update-HlaeCfgCard {
+  $all = @(Get-ChildItem $HlaeCfgDir -File -Filter *.cfg -ErrorAction SilentlyContinue).Count
+  $auto = @(Get-ChildItem (Join-Path $HlaeCfgDir "auto") -File -Filter *.cfg -ErrorAction SilentlyContinue).Count
+  $js = @(Get-ChildItem $HlaeCfgDir -File -Filter *.js -ErrorAction SilentlyContinue).Count
+  (El "HlaeCfgHint").Text = $(if ($all + $auto + $js) {
+      "в демке: exec fdh/<имя> — $all, сами после V3 — $auto (папка auto)" + $(if ($js) { " · скриптов .js: $js — это код внутри игры, только от тех, кому доверяешь" } else { "" }) }
+    else { "пока нет. Открыть папку: .cfg, .js, .xml для демок через HLAE; в папку auto — сами в каждой демке" })
+}
+
+function Open-HlaeCfgs { Ensure-HlaeCfgDir; Start-Process explorer.exe $HlaeCfgDir }
 
 function Open-Keys {
   $script:binds = @(Key-Binds)
@@ -1345,6 +1382,7 @@ function Refresh {
 (El "TakesCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Takes } catch { Show-Error $_.Exception.Message } })
 (El "BtnTkBack").Add_Click({ Show-Screen "main" })
 (El "CfgCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-UserCfgs } catch { Show-Error $_.Exception.Message } })
+(El "HlaeCfgCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-HlaeCfgs } catch { Show-Error $_.Exception.Message } })
 (El "KeysCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Keys } catch { Show-Error $_.Exception.Message } })
 (El "BtnKyBack").Add_Click({ $script:capture = $null; Show-Screen "settings" })
 (El "BtnKyReset").Add_Click({
@@ -1440,7 +1478,14 @@ public static class FolderPicker {
 (El "SwDirector").Add_Click({ $script:s.FakeDirector = [bool](El "SwDirector").IsChecked; Save })
 (El "SwWallhack").Add_Click({ $script:s.FakeWallhack = [bool](El "SwWallhack").IsChecked; Save })
 (El "SwExecFd").Add_Click({ $script:s.ExecFd = [bool](El "SwExecFd").IsChecked; Save; Update-Summary })
-(El "SwHlae").Add_Click({ $script:s.Hlae = [bool](El "SwHlae").IsChecked; Save; Update-Summary })
+(El "SwHlae").Add_Click({ $script:s.Hlae = [bool](El "SwHlae").IsChecked; Save; Update-Summary; Update-HlaeHint })
+# settings in three pages instead of one long column
+foreach ($t in "SetGame", "SetFake", "SetHlae") {
+  (El $t).Add_Checked({ param($sender, $e)
+    $page = $sender.Name -replace '^Set', 'Page'
+    foreach ($x in "PageGame", "PageFake", "PageHlae") { (El $x).Visibility = $(if ($x -eq $page) { "Visible" } else { "Collapsed" }) } })
+}
+(El "SetGame").IsChecked = $true
 # fields save on every change: going Back or pressing Play while still typing kept no lost focus,
 # and the value was gone
 (El "TbOptions").Add_TextChanged({ $script:s.LaunchOptions = (El "TbOptions").Text.Trim(); Save })

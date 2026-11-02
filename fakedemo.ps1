@@ -38,7 +38,7 @@ $OwnTrees = "addons\metamod", "addons\counterstrikesharp", "addons\BotController
 $SessionPort = 29121
 $SessionPass = -join ((48..57) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
 $CfgFiles = "fd.cfg", "fd_actions.cfg", "fd_blank.cfg", "fd_fake.cfg", "fd_help.cfg", "fd_user.cfg", "fd_unfake.cfg", "gamemode_custom_server.cfg",
-  "fd_ws.cfg", "fd_ws_list.cfg", "fd_own.cfg", "fd_watch.cfg", "fd_hlae.cfg", "v3_path_rec.cfg", "v3_path_js.cfg"
+  "fd_ws.cfg", "fd_ws_list.cfg", "fd_own.cfg", "fd_watch.cfg", "fd_hlae.cfg", "fd_hlae_own.cfg", "v3_path_rec.cfg", "v3_path_js.cfg"
 $UserCfgDir = Join-Path $Data "configs"
 $KeysFile = Join-Path $Data "keys.json"
 
@@ -242,7 +242,7 @@ function Ensure-UserCfgDir {
   $readme = Join-Path $UserCfgDir "README.txt"
   if (-not (Test-Path $readme)) {
     Set-Content $readme -Encoding UTF8 -Value @(
-      "Свои конфиги для fake-режима:",
+      "Fake-конфиги (свои конфиги для fake-режима):",
       "  configs\*.cfg       - запускаются из меню H > Configs",
       "  configs\auto\*.cfg  - запускаются сами при входе в fake-режим, по порядку имён (01_..., 02_...)",
       "Бинды и настройки из них откатываются командой unfake и при выходе из игры.",
@@ -251,13 +251,52 @@ function Ensure-UserCfgDir {
 }
 
 function Install-UserCfgs([string]$cfg) {
-  $auto = Join-Path $UserCfgDir "auto"
   Ensure-UserCfgDir
-  $dst = Join-Path $cfg "fdc"
+  Install-OwnCfgDir $UserCfgDir $cfg "fdc" $UserCfgBad "fd_own.cfg"
+}
+
+# HLAE configs: Documents\FakeDemo\configs\hlae, into cfg\fdh\ when the game starts through HLAE. auto\*.cfg run in
+# every demo after V3 (fd_v3.js), the others by 'exec fdh/<name>'. Their .js scripts and .xml campaths go along:
+# a 'mirv_script_load' or '... load' of one of them is pointed at its copy (HLAE wants a full path, a short
+# name was looked up in game\bin\win64). What they change goes back after the demo (reset -> fd_unfake)
+$HlaeCfgDir = Join-Path $UserCfgDir "hlae"
+$HlaeCfgBad = $UserCfgBad.Replace('(fake|unfake|', '(fe|reset|fake|unfake|')
+
+function Ensure-HlaeCfgDir {
+  New-Item -ItemType Directory -Force (Join-Path $HlaeCfgDir "auto") | Out-Null
+  $readme = Join-Path $HlaeCfgDir "README.txt"
+  if (-not (Test-Path $readme)) {
+    Set-Content $readme -Encoding UTF8 -Value @(
+      "HLAE-конфиги (свои конфиги для эдитинга, только при запуске через HLAE, в демке):",
+      "  hlae\*.cfg       - запуск в консоли: exec fdh/<имя> (список печатается в начале демки)",
+      "  hlae\auto\*.cfg  - запускаются сами в каждой демке после V3, по порядку имён (01_..., 02_...)",
+      "  hlae\*.js, *.xml - скрипты HLAE и пути камеры: mirv_script_load x.js / mirv_campath load x.xml",
+      "                     в своих конфигах находят их здесь сами",
+      "ВНИМАНИЕ: .js - это код, который выполняется внутри игры. Не ставь скрипты от незнакомых людей.",
+      "Бинды и настройки из конфигов откатываются после демки (reset) и при выходе из игры.",
+      "Строки, которые ломают FakeDemo или V3 (quit, exit, переопределение fe/reset/fake/fd_...), отключаются.")
+  }
+}
+
+function Install-HlaeCfgs([string]$cfg) {
+  Ensure-HlaeCfgDir
+  $assets = @(Get-ChildItem $HlaeCfgDir -File | Where-Object { $_.Extension -in ".js", ".xml" })
+  $js = @($assets | Where-Object Extension -eq ".js")
+  if ($js.Count) { Log "WARNING your HLAE configs bring $($js.Count) script(s) that run inside the game: $(($js | ForEach-Object Name) -join ', ')" }
+  Install-OwnCfgDir $HlaeCfgDir $cfg "fdh" $HlaeCfgBad "fd_hlae_own.cfg" $assets
+}
+
+# one folder of your configs into cfg\<sub>\ (see above), the list to run on their own into $runFile.
+# Returns the commands and cvars they use
+function Install-OwnCfgDir([string]$src, [string]$cfg, [string]$sub, [string]$bad, [string]$runFile, $assets = @()) {
+  $auto = Join-Path $src "auto"
+  $dst = Join-Path $cfg $sub
   if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
   New-Item -ItemType Directory -Force (Join-Path $dst "auto") | Out-Null
-  $files = @(Get-ChildItem $UserCfgDir -File -Filter *.cfg | ForEach-Object { @{ F = $_; Sub = "" } }) +
+  $files = @(Get-ChildItem $src -File -Filter *.cfg | ForEach-Object { @{ F = $_; Sub = "" } }) +
            @(Get-ChildItem $auto -File -Filter *.cfg | Sort-Object Name | ForEach-Object { @{ F = $_; Sub = "auto/" } })
+  $put = @{}
+  foreach ($a in $assets) { Copy-Item $a.FullName (Join-Path $dst $a.Name) -Force; $put[$a.Name.ToLower()] = Join-Path $dst $a.Name }
   $name = @{}
   # the game's exec takes plain names: other letters become _ plus a short hash, so two names never meet
   $md5 = [Security.Cryptography.MD5]::Create()
@@ -270,9 +309,20 @@ function Install-UserCfgs([string]$cfg) {
   foreach ($x in $files) {
     $out = foreach ($l in [IO.File]::ReadAllLines($x.F.FullName)) {
       $l = $l.TrimStart([char]0xFEFF)
-      if ($l -match $UserCfgBad) { $off++; Log "WARNING $($x.F.Name): line turned off: $l"; "// [FakeDemo] off: $l"; continue }
+      if ($l -match $bad) { $off++; Log "WARNING $($x.F.Name): line turned off: $l"; "// [FakeDemo] off: $l"; continue }
       # exec of another of your configs -> its copy
-      $l = [regex]::Replace($l, '\bexec\s+"?([^";\s]+?)(\.cfg)?"?(?=\s|;|$)', { param($m) $t = $name[$m.Groups[1].Value.ToLower()]; if ($t) { "exec fdc/$t" } else { $m.Value } })
+      # (a quoted name may have spaces)
+      $l = [regex]::Replace($l, '\bexec\s+(?:"([^";]+?)(?:\.cfg)?"|([^";\s]+?)(?:\.cfg)?)(?=\s|;|$)', {
+        param($m) $t = $name[($m.Groups[1].Value + $m.Groups[2].Value).ToLower()]; if ($t) { "exec $sub/$t" } else { $m.Value } })
+      # loading a script / campath of the folder -> its copy, by full path. Only loads: a save keeps going where
+      # it went (cfg\fdh\ is made new on every start)
+      if ($sub -eq "fdh") {
+        $l = [regex]::Replace($l, '\b(mirv_script_load|load)\s+"?([^";]*?([^\\/";\s]+\.(js|xml)))"?(?=\s*(;|$|//))', {
+          param($m) $p = $put[$m.Groups[3].Value.ToLower()]
+          if ($p) { return "$($m.Groups[1].Value) `"$p`"" }
+          if ($m.Groups[1].Value -eq "mirv_script_load") { Log "WARNING $($x.F.Name): loads a script that is not in your HLAE folder: $($m.Groups[2].Value)" }
+          $m.Value })
+      }
       foreach ($seg in ($l -replace '//.*$', '') -split ';') {
         $w = @($seg.Trim() -split '\s+' | ForEach-Object { $_.Trim('"') } | Where-Object { $_ })
         if ($w.Count -eq 0) { continue }
@@ -282,10 +332,16 @@ function Install-UserCfgs([string]$cfg) {
       $l
     }
     [IO.File]::WriteAllLines((Join-Path $dst "$($name[$x.F.BaseName.ToLower()]).cfg"), [string[]]@($out), (New-Object Text.UTF8Encoding $false))
-    if ($x.Sub) { $run += "exec fdc/$($name[$x.F.BaseName.ToLower()])" }
+    if ($x.Sub) { $run += "exec $sub/$($name[$x.F.BaseName.ToLower()])" }
   }
-  Set-Content (Join-Path $cfg "fd_own.cfg") -Encoding ASCII -Value (@("// fd_own.cfg - generated by FakeDemo: your configs from configs\auto") + $run)
-  if ($files.Count) { Log "your configs: $($files.Count) installed ($($run.Count) run on their own), $off line(s) turned off" }
+  # the HLAE ones are typed in the demo console: say which there are (with your name when it was changed)
+  $by = @($files | Where-Object { -not $_.Sub } | ForEach-Object {
+    $n = $name[$_.F.BaseName.ToLower()]
+    # echo without quotes (the game prints them): nothing in the line may end the command
+    "echo - exec $sub/$n$(if ($n -ne $_.F.BaseName) { "   ($($_.F.BaseName -replace '[";]', ''))" })" })
+  if ($sub -eq "fdh" -and $by.Count) { $run += @("echo [FakeDemo] your HLAE configs:") + $by }
+  [IO.File]::WriteAllLines((Join-Path $cfg $runFile), [string[]](@("// $runFile - generated by FakeDemo: your configs from $(Split-Path $src -Leaf)\auto") + $run), (New-Object Text.UTF8Encoding $false))
+  if ($files.Count) { Log "your configs ($sub): $($files.Count) installed ($(@($files | Where-Object Sub).Count) run on their own), $off line(s) turned off" }
   @($tokens.Keys)
 }
 
@@ -397,7 +453,10 @@ function Install-Cfg($s) {
   $touched = @()
   try { $touched = @(Install-UserCfgs $cfg) } catch { Log "WARNING your configs not installed: $($_.Exception.Message)" }
   # V3 sets fps_max 120 for its playback speeds, and the game saves it: after the demo yours comes back
-  if ($s.Hlae) { $touched += "fps_max" }
+  if ($s.Hlae) {
+    $touched += "fps_max"
+    try { $touched += @(Install-HlaeCfgs $cfg) } catch { Log "WARNING your HLAE configs not installed: $($_.Exception.Message)" }
+  }
   try { Build-Unfake $s (Join-Path $cfg "fd_unfake.cfg") $touched } catch { Log "WARNING fd_unfake.cfg not rebuilt: $($_.Exception.Message)" }
   if ($s.Hlae) { try { Install-V3 $s $cfg } catch { Log "WARNING V3 not installed: $($_.Exception.Message)" } }
   # Watch (H > Demos, launcher) runs it before playdemo: V3 sets fps_max, which the game refuses inside a demo
