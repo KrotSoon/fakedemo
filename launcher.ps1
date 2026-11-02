@@ -533,6 +533,16 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           </DockPanel>
         </Border>
 
+        <Border x:Name="CfgCard" Style="{StaticResource ClickCard}" Margin="0,8,0,0" Padding="12,10">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Label}" Text="Свои конфиги"/>
+              <TextBlock x:Name="CfgHint" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
         <Button x:Name="BtnShortcut" Margin="-6,10,0,0" HorizontalAlignment="Left" Style="{StaticResource Link}" Content="Ярлык FakeDemo на рабочий стол"/>
         <DockPanel Margin="-6,4,-6,0">
           <Button x:Name="BtnBinds" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Обновить бинды для unfake"/>
@@ -1091,7 +1101,18 @@ function Update-KeysCard {
   $b = @(Key-Binds)
   $changed = @($b | Where-Object { $x = $_; $x.Key -ne ($KeyActions | Where-Object { $_.Cmd -eq $x.Cmd }).Key }).Count
   (El "KeysHint").Text = "$($b.Count) действий: меню, запись, боты, Wallhack…$(if ($changed) { " · изменено: $changed" })"
+  Update-CfgCard
 }
+
+# your own configs (fakedemo.ps1 Install-UserCfgs copies them into the game on Play)
+function Update-CfgCard {
+  $all = @(Get-ChildItem $UserCfgDir -File -Filter *.cfg -ErrorAction SilentlyContinue).Count
+  $auto = @(Get-ChildItem (Join-Path $UserCfgDir "auto") -File -Filter *.cfg -ErrorAction SilentlyContinue).Count
+  (El "CfgHint").Text = $(if ($all + $auto) { "в меню H › Configs: $($all + $auto)" + $(if ($auto) { ", сами при входе в fake: $auto (папка auto)" } else { "" }) }
+    else { "пока нет. Открыть папку: .cfg сюда — запуск из меню H › Configs, в папку auto — сами при входе в fake" })
+}
+
+function Open-UserCfgs { Ensure-UserCfgDir; Start-Process explorer.exe $UserCfgDir }
 
 function Open-Keys {
   $script:binds = @(Key-Binds)
@@ -1292,6 +1313,7 @@ function Refresh {
 (El "BtnBack").Add_Click({ Show-Screen "main" })
 (El "TakesCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Takes } catch { Show-Error $_.Exception.Message } })
 (El "BtnTkBack").Add_Click({ Show-Screen "main" })
+(El "CfgCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-UserCfgs } catch { Show-Error $_.Exception.Message } })
 (El "KeysCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Keys } catch { Show-Error $_.Exception.Message } })
 (El "BtnKyBack").Add_Click({ $script:capture = $null; Show-Screen "settings" })
 (El "BtnKyReset").Add_Click({

@@ -224,6 +224,8 @@ public partial class FakeMimic : BasePlugin
         AddCommandListener("quit", OnQuit);
         AddCommandListener("exit", OnQuit);
         AddCommandListener("say_team", OnSay);
+        // own configs: a row like a module's (the main screen is full, they share "Modules ›")
+        _addonItems.Insert(0, () => new ApiMenuItem("Configs ›", ConfigsMenu) { Value = OwnCfgs().Count.ToString() });
     }
 
     public override void OnAllPluginsLoaded(bool hotReload)

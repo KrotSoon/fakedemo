@@ -545,6 +545,34 @@ public partial class FakeMimic
     const float RespawnDelay = 2f;
     bool _ownRespawn;   // the cfg wanted auto-respawn and FakeMimic does it instead
 
+    // ---------------- your own configs ----------------
+    // The launcher copies Documents\FakeDemo\configs into cfg\fdc (configs\auto runs by itself after the
+    // fake binds); this screen runs any of them. unfake puts your binds and the settings they change back
+    string OwnCfgDir => Path.Combine(Server.GameDirectory, "csgo", "cfg", "fdc");
+
+    List<string> OwnCfgs() => !Directory.Exists(OwnCfgDir) ? new() :
+        Directory.GetFiles(OwnCfgDir, "*.cfg").Select(f => Path.GetFileNameWithoutExtension(f))
+            .Concat(Directory.Exists(Path.Combine(OwnCfgDir, "auto"))
+                ? Directory.GetFiles(Path.Combine(OwnCfgDir, "auto"), "*.cfg").Select(f => "auto/" + Path.GetFileNameWithoutExtension(f))
+                : [])
+            .ToList();
+
+    void ConfigsMenu(CCSPlayerController p) => ConfigsMenu(p, 0);
+
+    void ConfigsMenu(CCSPlayerController p, int page)
+    {
+        var entries = OwnCfgs().Select(c => new MenuItem(c.StartsWith("auto/") ? c[5..] : c, pl =>
+        {
+            Server.ExecuteCommand($"exec fdc/{c}");
+            Say(pl, $"config '{c}' run (unfake puts your binds back)");
+            ConfigsMenu(pl, page);
+        }) { Value = c.StartsWith("auto/") ? "auto" : null }).ToList();
+        if (entries.Count == 0)
+            entries.Add(new("Put .cfg files into Documents\\FakeDemo\\configs", _ => { }) { Kind = ApiRowKind.Info });
+        entries.Add(new("Your binds back (unfake)", pl => { Server.ExecuteCommand("exec fd_unfake"); Say(pl, "your binds back; fake keys: exec fd_user"); ConfigsMenu(pl, page); }));
+        ShowPaged(p, "Your configs", entries, page, ConfigsMenu, MainMenu);
+    }
+
     // a hot reload: the cvars go back on, or the new instance found them off and nobody respawned
     public override void Unload(bool hotReload)
     {
