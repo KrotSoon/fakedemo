@@ -1,0 +1,275 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FakeMimic menu</title>
+<style>
+/* the HUD menu (hud/styles/custom_game/fm_menu.css) for the overlay window: same sizes, colours and
+   motion. The blur is the window's own (Windows), the page draws the glass tint over it.
+   Stratum2 (the game's font) ships encrypted, Bahnschrift is the closest Windows font. */
+html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; }
+/* the margin is the shadow's room (the window is transparent around the menu) */
+body { font-family: Bahnschrift, "Segoe UI", sans-serif; display: inline-block; padding: 24px 30px 46px 30px; }
+#menu {
+  position: relative; width: 460px; box-sizing: border-box;
+  padding: 20px 16px 14px 16px;
+  background: #161a22a0;
+  border: 1px solid #ffffff2a; border-radius: 20px;
+  box-shadow: #00000066 0 12px 34px 0;
+}
+
+/* ---- header: drag to move ---- */
+.Header { display: flex; align-items: flex-start; margin: 0 6px 14px 0; cursor: grab; }
+.Heading { flex: 1; padding-left: 8px; }
+.Brand { font-size: 13px; letter-spacing: 3px; font-weight: bold; color: #e4ae39; }
+.Title { font-size: 27px; font-weight: bold; color: #fff; }
+.Title, .Row { animation: fm-in .2s cubic-bezier(.2, 1.3, .4, 1) backwards; }
+@keyframes fm-in { from { opacity: 0; transform: translateX(-14px); } }
+
+/* ---- rows ---- */
+.Row { position: relative; }
+.Item {
+  display: flex; align-items: center; height: 48px; margin-top: 6px;
+  border-radius: 14px; background: #ffffff0d; cursor: pointer;
+  transition: background-color .06s ease-out, transform .18s cubic-bezier(.2, 1.6, .4, 1), opacity .18s ease-out;
+}
+.Item:hover { background: #e4ae3938; transform: translateX(12px); }
+.Item:active { background: #e4ae3960; transform: translateX(6px) scale(.98); transition-duration: .03s; }
+.Key {
+  flex: none; width: 28px; height: 28px; margin: 0 14px; border-radius: 9px; background: #ffffff1a;
+  display: grid; place-items: center; font-size: 15px; font-weight: bold; color: #ffffffc0;
+  transition: background-color .072s ease-out, transform .18s cubic-bezier(.2, 1.8, .4, 1);
+}
+.Item:hover .Key { background: #e4ae39; transform: scale(1.15); color: #11141a; }
+.ItemText { flex: 1; font-size: 19px; color: #e8e8ec; margin-right: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.Item:hover .ItemText { color: #fff; }
+.HasVal .ItemText, .Tog .ItemText { margin-right: 0; }
+
+.Accent .ItemText { color: #ff8170; }
+.Accent:hover { background: #ff6a5538; }
+.Accent:hover .Key { background: #ff6a55; }
+
+.Close { height: 40px; margin-top: 12px; background: none; }
+.Close .ItemText { font-size: 16px; color: #ffffff80; }
+
+.Val { flex: none; margin: 0 14px 0 8px; padding: 1px 8px; border: 1px solid #ffffff40; border-radius: 7px; font-size: 14px; color: #ffffff90; }
+.Tog .Val { margin-right: 0; }
+.On .Val { border-color: #e4ae39; color: #e4ae39; }
+.Switch { flex: none; width: 42px; height: 24px; margin: 0 14px 0 10px; border-radius: 12px; background: #ffffff26; transition: background-color .09s; }
+.Thumb { width: 18px; height: 18px; margin: 3px; border-radius: 9px; background: #fff; transition: transform .168s cubic-bezier(.2, 1.6, .4, 1); }
+.On .Switch { background: #e4ae39; }
+.On .Thumb { transform: translateX(18px); }
+
+.Big .Item { height: 66px; }
+.Big .ItemText { font-size: 20px; font-weight: bold; }
+.Big.On .Item { background: #e4ae3940; }
+.Big.On .Key { background: #e4ae39; color: #11141a; }
+.Prim .Item { background: #e4ae3933; }
+.Prim .Item:hover { background: #e4ae3955; }
+.Prim .Key { background: #e4ae39; color: #11141a; }
+.Prim .Item.Accent { background: #ff6a5533; }
+.Prim .Item.Accent:hover { background: #ff6a5555; }
+.Prim .Item.Accent .Key { background: #ff6a55; }
+.Prim .Item.Accent .Val { border-color: #ff8170; color: #ff8170; }
+
+/* a choice / colours / cards: the row's text is a heading, no button look */
+.Head .Item { height: 30px; margin-top: 10px; background: none; cursor: default; }
+.Head .Item:hover, .Head .Item:active { background: none; transform: none; }
+.Head .ItemText, .Head .Item:hover .ItemText { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; color: #ffffff80; }
+.Head .Key, .Head .Item:hover .Key { width: 20px; height: 20px; border-radius: 6px; background: none; border: 1px solid #ffffff30; font-size: 12px; color: #ffffff80; transform: none; }
+
+.Info .Item { height: 30px; background: none; cursor: default; }
+.Info .Item:hover, .Info .Item:active { background: none; transform: none; }
+.Info .Key { display: none; }
+.Info .ItemText, .Info .Item:hover .ItemText { margin-left: 14px; font-size: 15px; color: #ffffffa8; white-space: normal; }
+
+.TGood .Key { background: #6fd65a; } .TOk .Key { background: #ffd23c; }
+.TBad .Key { background: #ff6a55; } .TGold .Key { background: #e4ae39; }
+.TGood .Key, .TOk .Key, .TBad .Key, .TGold .Key { color: #11141a; }
+.Faded .Item { opacity: .45; }
+
+.Opts { display: flex; margin-top: 4px; border-radius: 12px; background: #ffffff0d; }
+.Opt {
+  flex: 1; height: 34px; margin: 4px 3px; border-radius: 9px; cursor: pointer;
+  display: grid; place-items: center; font-size: 15px; color: #ffffffc0;
+  transition: background-color .072s;
+}
+.Opt:hover { background: #ffffff1a; }
+.Opt.Sel { background: #e4ae39; color: #11141a; }
+.Stars .Opts { background: none; }
+.Stars .Opt { font-size: 22px; color: #ffffff38; }
+.Stars .Opt:hover { background: none; color: #ffd98a; }
+.Stars .Opt.Lit { color: #e4ae39; }
+
+.Swatches { display: flex; margin-top: 6px; }
+.Swatch {
+  display: flex; width: 58px; height: 30px; margin: 0 4px 0 6px; box-sizing: border-box; overflow: hidden;
+  border-radius: 9px; border: 2px solid #ffffff20; cursor: pointer;
+  transition: transform .15s cubic-bezier(.2, 1.6, .4, 1);
+}
+.Swatch:hover { transform: scale(1.08); }
+.Swatch.Sel { border-color: #e4ae39; }
+.Swatch div { flex: 1; }
+.C0 { background: #ff9628; } .C1 { background: #5aa0ff; } .C2 { background: #ff5a46; } .C3 { background: #3cdcc8; }
+.C4 { background: #ffd23c; } .C5 { background: #8cff6e; } .C6 { background: #ffffff; } .C7 { background: #d26bff; }
+
+.Cards { display: flex; margin-top: 6px; }
+.Card {
+  width: 98px; height: 146px; margin-left: 6px; box-sizing: border-box; overflow: hidden;
+  border-radius: 10px; border: 2px solid #ff963070; background: #ffffff0d; cursor: pointer;
+  transition: transform .15s cubic-bezier(.2, 1.6, .4, 1), border-color .072s ease-out;
+}
+.Card:hover { transform: translateY(-3px); }
+.Card.CT { border-color: #5aa0ff70; }
+.Card.Sel { border-color: #e4ae39; }
+.Portrait { width: 94px; height: 94px; background: #00000050 center / 100% 100% no-repeat; }
+.CardName { margin-top: 4px; padding: 0 3px; font-size: 14px; color: #fff; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.CardSub { font-size: 11px; color: #ffffff80; text-align: center; }
+
+.Divider { margin-top: 10px; border-top: 1px solid #ffffff1c; }
+
+/* nested rows: one darker block with a gold outline */
+.Sub { background: #00000055; border-left: 1px solid #e4ae3955; border-right: 1px solid #e4ae3955; padding: 0 8px; }
+.SubFirst { border-top: 1px solid #e4ae3955; border-radius: 14px 14px 0 0; padding-top: 2px; }
+.SubLast { border-bottom: 1px solid #e4ae3955; border-radius: 0 0 14px 14px; padding-bottom: 8px; }
+.SubFirst.SubLast { border-radius: 14px; }
+
+/* ---- size: drag the corner ---- */
+#grip { position: absolute; right: 4px; bottom: 4px; width: 18px; height: 18px; cursor: nwse-resize; opacity: .35; transition: opacity .1s; }
+#grip:hover, #grip.On { opacity: 1; }
+#grip::before, #grip::after { content: ""; position: absolute; right: 4px; bottom: 4px; background: #e4ae39; border-radius: 1px; }
+#grip::before { width: 10px; height: 2px; }
+#grip::after { width: 2px; height: 10px; }
+</style>
+</head>
+<body>
+<div id="menu">
+  <div class="Header" id="head"><div class="Heading"><div class="Brand">FAKEMIMIC</div><div class="Title" id="title"></div></div></div>
+  <div id="rows"></div>
+  <div id="grip"></div>
+</div>
+<script>
+const host = window.chrome && window.chrome.webview;
+const send = m => host && host.postMessage(m);
+const click = id => send("cmd fm_click " + id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const menu = document.getElementById("menu");
+let size = 0;   // -20..40 as in the plugin: zoom 0.4 .. 1.3 (the HUD stops at 0 = 0.7)
+
+document.getElementById("head").addEventListener("mousedown", e => { if (e.button === 0) send("drag"); });
+
+function row(r, n, rows) {
+  const k = r.kind, segs = k === "Choice" || k === "Stars";
+  const nested = i => i >= 0 && i < rows.length && rows[i].sub;
+  const cls = ["Row"];
+  if (k === "Toggle" || k === "BigToggle") cls.push("Tog");
+  if (k === "BigToggle" || k === "Primary") cls.push("Big");
+  if (k === "Primary") cls.push("Prim");
+  if (k === "Stars") cls.push("Stars");
+  if (segs || k === "Colors" || k === "Cards") cls.push("Head");
+  if (k === "Info") cls.push("Info");
+  if (r.on) cls.push("On");
+  if (r.val) cls.push("HasVal");
+  if (r.faded) cls.push("Faded");
+  if (r.div) cls.push("Divider");
+  if (r.tone && r.tone !== "None") cls.push("T" + r.tone);
+  if (r.sub) { cls.push("Sub"); if (!nested(n - 2)) cls.push("SubFirst"); if (!nested(n)) cls.push("SubLast"); }
+  const w = el("div", cls.join(" "));
+  const b = el("div", "Item" + (r.accent ? " Accent" : ""));
+  b.append(el("div", "Key", n), el("div", "ItemText", r.t));
+  if (r.val) b.append(el("div", "Val", r.val));
+  if (k === "Toggle" || k === "BigToggle") { const s = el("div", "Switch"); s.append(el("div", "Thumb")); b.append(s); }
+  if (!w.classList.contains("Head") && k !== "Info") b.onclick = () => click("b" + n);
+  w.append(b);
+  if (segs && r.opts) {
+    const o = el("div", "Opts");
+    r.opts.forEach((t, i) => {
+      const s = el("div", "Opt" + (k === "Choice" && r.sel === i ? " Sel" : k === "Stars" && i <= r.sel ? " Lit" : ""), t);
+      s.onclick = () => click(`o${n}_${i}`);
+      o.append(s);
+    });
+    w.append(o);
+  }
+  if (k === "Colors" && r.sw) {
+    const o = el("div", "Swatches");
+    r.sw.forEach(([a, c], i) => {
+      const s = el("div", "Swatch" + (r.sel === i ? " Sel" : ""));
+      s.append(el("div", "C" + a), el("div", "C" + c));
+      s.onclick = () => click(`w${n}_${i}`);
+      o.append(s);
+    });
+    w.append(o);
+  }
+  if (k === "Cards" && r.cards) {
+    const o = el("div", "Cards");
+    r.cards.forEach((c, i) => {
+      const s = el("div", "Card" + (c.ct ? " CT" : "") + (r.sel === i ? " Sel" : ""));
+      const p = el("div", "Portrait");
+      p.style.backgroundImage = `url("https://fm.portraits/${c.p}.png")`;
+      s.append(p, el("div", "CardName", c.t), el("div", "CardSub", c.s));
+      s.onclick = () => click(`c${n}_${i}`);
+      o.append(s);
+    });
+    w.append(o);
+  }
+  return w;
+}
+
+function zoom() { return 0.7 + size * 0.015; }
+
+function fit() {
+  requestAnimationFrame(() => {
+    const page = document.body.getBoundingClientRect(), box = menu.getBoundingClientRect();
+    send(`size ${page.width} ${page.height} ${box.left} ${box.top} ${box.width} ${box.height} ${20 * zoom()}`);
+  });
+}
+
+let last = "";
+function render(m) {
+  size = m.s || 0;
+  document.body.style.zoom = zoom();
+  const title = document.getElementById("title");
+  const rows = document.getElementById("rows");
+  // the same screen again (a switch flipped): no entrance
+  const again = last === m.title;
+  last = m.title;
+  title.textContent = m.title;
+  rows.replaceChildren(...m.rows.map((r, i) => row(r, i + 1, m.rows)));
+  if (m.close) {
+    const c = el("div", "Row"), b = el("div", "Item Close");
+    b.append(el("div", "Key", 9), el("div", "ItemText", m.close));
+    b.onclick = () => click("b9");
+    c.append(b); rows.append(c);
+  }
+  const anim = [title, ...rows.children];
+  anim.forEach((r, i) => { r.style.animationDelay = (i * 0.022) + "s"; if (again) r.style.animation = "none"; });
+  if (!again) { title.style.animation = "none"; title.offsetWidth; title.style.animation = ""; }
+  fit();
+}
+
+// size: the corner follows the cursor, the plugin stores the step on release
+const grip = document.getElementById("grip");
+grip.addEventListener("pointerdown", e => {
+  grip.setPointerCapture(e.pointerId); grip.classList.add("On");
+  const x0 = e.screenX, w0 = 460 * zoom(), s0 = size;
+  const move = ev => {
+    const s = Math.max(-20, Math.min(40, Math.round(((w0 + (ev.screenX - x0) / devicePixelRatio) / 460 - 0.7) / 0.015)));
+    if (s !== size) { size = s; document.body.style.zoom = zoom(); fit(); }
+  };
+  const up = () => {
+    grip.removeEventListener("pointermove", move); grip.classList.remove("On");
+    if (size !== s0) send("cmd fm_menusize " + size);
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", up, { once: true });
+});
+
+if (host) host.addEventListener("message", e => render(e.data));
+else render({ title: "Main", close: "Close", s: 20, rows: [   // opened in a browser: a sample screen
+  { t: "Record new movement", kind: "Primary" }, { t: "Movements ›", kind: "Button", val: "4" },
+  { t: "Bots play", kind: "Choice", opts: ["Off", "Once", "Loop"], sel: 2, div: true }, { t: "Wallhack", kind: "Toggle", on: true },
+  { t: "Path colour", kind: "Colors", sw: [[0, 1], [2, 3], [4, 5]], sel: 1, sub: true }, { t: "Rating", kind: "Stars", opts: ["★", "★", "★", "★", "★"], sel: 2, sub: true },
+  { t: "Delete", kind: "Button", accent: true }] });
+</script>
+</body>
+</html>

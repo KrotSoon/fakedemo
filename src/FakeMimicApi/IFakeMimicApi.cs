@@ -19,6 +19,38 @@ public static class FakeDemoPaths
     public static string Takes => Path.Combine(Root, "takes");
 }
 
+/// Every connected player controller. Use this, not Utilities.GetPlayers: that one only looks at the first
+/// Server.MaxPlayers slots, and after a workshop map loaded over the main menu (map_workshop; the menu's
+/// background server has maxplayers 1) CounterStrikeSharp still says 1, so the bots were not seen at all
+/// ("bot was not added" on de_ravine).
+/// Not before the game made its entity system (main menu, map loading): CounterStrikeSharp reads the entity
+/// list once through a Lazy that keeps the first failure, and then every entity call failed for the whole
+/// session (commands silent, the menu did not open, an exception every tick made the game stutter).
+public static class FakeDemoPlayers
+{
+    static bool _entities;
+
+    static bool EntitiesReady()
+    {
+        if (_entities) return true;
+        try { _entities = NativeAPI.GetConcreteEntityListPointer() != IntPtr.Zero; }
+        catch (NativeException) { }
+        return _entities;
+    }
+
+    public static List<CCSPlayerController> All()
+    {
+        var list = new List<CCSPlayerController>();
+        if (!EntitiesReady()) return list;
+        for (var i = 1; i <= 64; i++)
+        {
+            var c = CounterStrikeSharp.API.Utilities.GetPlayerFromIndex(i);
+            if (c is { IsValid: true, Connected: PlayerConnectedState.Connected }) list.Add(c);
+        }
+        return list;
+    }
+}
+
 /// Model: the agent model the bot wore ("" = the team's default).
 public record TakeBot(string Recording, string BotName, int Team, string Model = "");
 
@@ -89,7 +121,7 @@ public interface IFakeMimicApi
     const string Capability = "fakemimic:api";
 
     /// Bumped on every change of this contract; add-ons compare it with the one they were built with.
-    const int CurrentVersion = 6;
+    const int CurrentVersion = 7;
 
     /// CurrentVersion of the FakeMimic that is loaded.
     int Version { get; }
@@ -105,6 +137,10 @@ public interface IFakeMimicApi
     event Action<string>? RecordingStopped;
     /// Fired when the player starts the bots (Bots play, fm_go); not for PlaySetup and not for a loop's next pass.
     event Action? BotsStarted;
+    /// Fired just after the map was reset before a start (every pass of a loop too). The reset sends the
+    /// player a round start, and the game then drops beams and glow outlines on its side although they
+    /// still exist on the server: add-ons that draw such things make them again here.
+    event Action? MapCleared;
 
     /// Adds an entry to FakeMimic's main menu (one per add-on; the menu holds 8 rows).
     void AddMainMenuItem(string text, Action<CCSPlayerController> pick);

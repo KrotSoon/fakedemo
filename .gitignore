@@ -3,6 +3,7 @@ src/*/bin/
 src/*/obj/
 src/.vs/
 plugins/
+/overlay/
 dist/
 # dependency zips go into the GitHub release named in deps.json, not into git
 deps/*.zip

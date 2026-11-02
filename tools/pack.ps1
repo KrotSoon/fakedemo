@@ -12,7 +12,7 @@ $stage = Join-Path $dist "FakeDemo"
 if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
 New-Item -ItemType Directory -Force $stage | Out-Null
 foreach ($i in "FakeDemo.exe", "FakeDemo.cmd", "Снять плагины.cmd", "fakedemo.ps1", "launcher.ps1", "VERSION", "deps.json",
-               "README.md", "CHANGELOG.md", "LICENSE-THIRD-PARTY.md", "game", "plugins") {
+               "README.md", "CHANGELOG.md", "LICENSE-THIRD-PARTY.md", "game", "plugins", "overlay") {
   Copy-Item (Join-Path $root $i) $stage -Recurse
 }
 # ZipFile, not Compress-Archive: PS 5.1 writes '' separators and mangles the Cyrillic file name

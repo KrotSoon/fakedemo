@@ -697,6 +697,16 @@ function Wait-Cs2Start {
   }
 }
 
+# The H menu in a window over the game (overlay\FakeDemoOverlay.exe): it finds the game console itself
+# and tells FakeMimic to draw the menu there. Without it the menu stays in the game's HUD.
+function Start-Overlay {
+  $exe = Join-Path $Here "overlay\FakeDemoOverlay.exe"
+  if (-not (Test-Path $exe)) { Log "menu window not found ($exe): the menu stays in the game's HUD"; return }
+  Get-Process FakeDemoOverlay -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Process $exe
+  Log "menu window started"
+}
+
 function Play($s) {
   Need-Closed
   Restore-OwnKeys $s   # before Build-Unfake reads them: a clean profile refreshes the clean copy
@@ -713,10 +723,12 @@ function Play($s) {
   try {
     Wait-Cs2Start
     Log "CS2 is running. Plugins come out when it closes - keep this running"
+    Start-Overlay
     if ($workshop) { Load-WorkshopMap $s }
     Wait-Process cs2 -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3   # let cs2 release its files
   } finally {
+    Get-Process FakeDemoOverlay -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Plugins-Off $s
     Restore-OwnKeys $s
   }

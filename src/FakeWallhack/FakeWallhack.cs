@@ -124,6 +124,7 @@ public class FakeWallhack : BasePlugin
         if (fm.Version != IFakeMimicApi.CurrentVersion)
             Logger.LogWarning("FakeMimic API {Have}, FakeWallhack was built for {Want}: install matching versions", fm.Version, IFakeMimicApi.CurrentVersion);
         fm.AddMainMenuItem(() => new ApiMenuItem("Wallhack ›", Screen) { Value = Wanted ? "on" : "off", On = Wanted });
+        fm.MapCleared += Redraw;
         fm.RecordingStarted += _ => _auto++;
         fm.RecordingStopped += _ => _auto = Math.Max(0, _auto - 1);
         fm.TakeStarted += _ => _auto++;
@@ -192,7 +193,7 @@ public class FakeWallhack : BasePlugin
         : _autoOn ? "bots glow only while you record or a demo records" : "wallhack off";
 
     static CCSPlayerController? Human() =>
-        Utilities.GetPlayers().FirstOrDefault(p => p is { IsValid: true, IsBot: false, IsHLTV: false });
+        FakeDemoPlayers.All().FirstOrDefault(p => p is { IsValid: true, IsBot: false, IsHLTV: false });
 
     Color TeamColor(int team) => ApiColors.Rgb[team == 3 ? Palettes[_palette].CT : Palettes[_palette].T];
 
@@ -216,7 +217,7 @@ public class FakeWallhack : BasePlugin
             var human = Human();
             var eye = human?.PlayerPawn.Value?.AbsOrigin;
             var recorded = _who == 3 ? Recorded() : new();
-            foreach (var bot in Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: true, IsHLTV: false, PawnIsAlive: true }))
+            foreach (var bot in FakeDemoPlayers.All().Where(p => p is { IsValid: true, IsBot: true, IsHLTV: false, PawnIsAlive: true }))
             {
                 if (bot.PlayerPawn.Value is not { IsValid: true } pawn || !Picked(bot, human, recorded)) continue;
                 if (AlphaAt(eye, pawn) == 0) continue;
@@ -302,6 +303,16 @@ public class FakeWallhack : BasePlugin
         relay.AcceptInput("FollowEntity", pawn, relay, "!activator");
         copy.AcceptInput("FollowEntity", relay, copy, "!activator");
         return new Glow { Relay = relay, Copy = copy, Pawn = pawn, Model = model, Color = color };
+    }
+
+    // after FakeMimic's map reset the game no longer shows the outlines and beams made before it
+    void Redraw()
+    {
+        foreach (var slot in _glows.Keys.ToList()) Remove(slot);
+        ClearBeams();
+        _beamsKey = "";
+        Sync();
+        SyncPaths();
     }
 
     void Remove(int slot)

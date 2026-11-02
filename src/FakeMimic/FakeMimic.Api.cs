@@ -60,6 +60,8 @@ public partial class FakeMimic
         public event Action<string>? RecordingStopped;
         public event Action? BotsStarted;
         public void RaiseBotsStarted() => BotsStarted?.Invoke();
+        public event Action? MapCleared;
+        public void RaiseMapCleared() => MapCleared?.Invoke();
         public void RaiseRecording(string name, bool started) => (started ? RecordingStarted : RecordingStopped)?.Invoke(name);
 
         public void RaiseStarted(TakeInfo info) => TakeStarted?.Invoke(info);

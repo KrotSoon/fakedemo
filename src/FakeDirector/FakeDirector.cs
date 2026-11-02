@@ -73,6 +73,7 @@ public class FakeDirector : BasePlugin
             Logger.LogWarning("FakeMimic API {Have}, FakeDirector was built for {Want}: install matching versions", _fm.Version, IFakeMimicApi.CurrentVersion);
         _fm.TakeStarted += _ => ClearPreview();
         _fm.BotsStarted += ClearPreview;   // the player's own start: the preview's routes would not match
+        _fm.MapCleared += OnMapCleared;
         _fm.TakeStopped += OnTakeStopped;
         _fm.AddMainMenuItem(() => new ApiMenuItem("Demos ›", p => { _folder = null; TakesMenu(p); }) { Value = Load(LogPath(Server.MapName, _fm.Folder)).Count.ToString() });
     }
@@ -312,7 +313,7 @@ public class FakeDirector : BasePlugin
     [CounterStrikeSharp.API.Core.Attributes.Registration.ConsoleCommand("fd_watchlast", "fd_watchlast - watch the newest demo of the current folder")]
     public void CmdWatchLast(CCSPlayerController? caller, CounterStrikeSharp.API.Modules.Commands.CommandInfo cmd)
     {
-        var p = caller ?? Utilities.GetPlayers().FirstOrDefault(x => x is { IsValid: true, IsBot: false, IsHLTV: false });
+        var p = caller ?? FakeDemoPlayers.All().FirstOrDefault(x => x is { IsValid: true, IsBot: false, IsHLTV: false });
         if (p == null) return;
         var last = Load(CurrentLog).Where(t => DemoFile(t.Demo) != null).MaxBy(t => t.Started);
         if (last == null) { _fm?.Say(p, $"no demos in {Folder} yet"); return; }
@@ -396,13 +397,26 @@ public class FakeDirector : BasePlugin
     void Preview(CCSPlayerController p, TakeRecord t)
     {
         ClearPreview();
-        var missing = 0;
-        var playable = new List<TakeBot>();
-        foreach (var b in t.Bots)
+        var playable = t.Bots.Where(b => _fm?.Route(Folder, b.Recording) is { Path.Count: > 0 }).ToList();
+        var missing = t.Bots.Count - playable.Count;
+        _previewBots = playable;
+        DrawRoutes();
+        _preview = t.Demo;
+        if (_fm == null || playable.Count == 0) { _fm?.Say(p, "the recordings of this demo are gone"); return; }
+        var demo = t.Demo;
+        _fm.Say(p, _fm.PlaySetup(Folder, playable, () => _fm.Say(p, $"preview of {demo}: the bots play it in a loop, J to see them through walls"))
+            + (missing > 0 ? $"; {missing} recording(s) are gone" : ""));
+    }
+
+    List<TakeBot> _previewBots = new();
+
+    void DrawRoutes()
+    {
+        foreach (var e in _ghosts.Where(e => e.IsValid)) e.Remove();
+        _ghosts.Clear();
+        foreach (var b in _previewBots)
         {
-            var route = _fm?.Route(Folder, b.Recording);
-            if (route == null || route.Path.Count == 0) { missing++; continue; }
-            playable.Add(b);
+            if (_fm?.Route(Folder, b.Recording) is not { Path.Count: > 0 } route) continue;
             var color = b.Team == 3 ? RouteCT : RouteT;
             var step = Math.Max(1, (route.Path.Count + MaxSegments - 1) / MaxSegments);
             var prev = route.Path[0];
@@ -414,11 +428,12 @@ public class FakeDirector : BasePlugin
             }
             Beam(route.Path[0], route.Path[0] with { Z = route.Path[0].Z + 72 }, StartPost);
         }
-        _preview = t.Demo;
-        if (_fm == null || playable.Count == 0) { _fm?.Say(p, "the recordings of this demo are gone"); return; }
-        var demo = t.Demo;
-        _fm.Say(p, _fm.PlaySetup(Folder, playable, () => _fm.Say(p, $"preview of {demo}: the bots play it in a loop, J to see them through walls"))
-            + (missing > 0 ? $"; {missing} recording(s) are gone" : ""));
+    }
+
+    // every loop pass resets the map, and the game drops the routes then
+    void OnMapCleared()
+    {
+        if (_preview != null) DrawRoutes();
     }
 
     void StopPreview()
@@ -445,6 +460,7 @@ public class FakeDirector : BasePlugin
     {
         foreach (var e in _ghosts.Where(e => e.IsValid)) e.Remove();
         _ghosts.Clear();
+        _previewBots = new();
         _preview = null;
     }
 

@@ -15,7 +15,8 @@ using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Utils;
-using Vector = CounterStrikeSharp.API.Modules.Utils.Vector;
+using FakeMimicApi;
+using Vector =CounterStrikeSharp.API.Modules.Utils.Vector;
 
 namespace FakeMimic;
 
@@ -117,7 +118,10 @@ public partial class FakeMimic
             subs = subs[Math.Min(skipSubs, subs.Length)..];
         }
 
-        return new Recording { Team = src.Team, Weapons = src.Weapons, Ticks = ticks, Subs = subs, Commands = commands, Buys = buys };
+        // the history is one opaque block for the whole recording with the original angles: it cannot be cut
+        // or turned, so a skipped start or a moved path plays with the bot's own spread
+        var history = e.OffsetTicks < 0 || e.Moved ? Array.Empty<byte>() : src.History;
+        return new Recording { Team = src.Team, Weapons = src.Weapons, Ticks = ticks, Subs = subs, Commands = commands, Buys = buys, History = history };
     }
 
     // ---------------- the map as it was before the bots ----------------
@@ -141,9 +145,12 @@ public partial class FakeMimic
             removed++;
         }
         Server.ExecuteCommand("ragdoll_cleanup_all; shatterglass_cleanup");
-        foreach (var p in Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, IsHLTV: false }))
+        foreach (var p in FakeDemoPlayers.All().Where(p => p is { IsValid: true, IsBot: false, IsHLTV: false }))
             new EventRoundStart(true).FireEventToClient(p);   // the game clears its decals
         if (removed > 0) Server.PrintToConsole($"[FM] map cleared: {removed} leftovers");
+        // the round start also drops beams and outlines in the game: add-ons draw theirs again, a moment
+        // later (what is made in the same tick reaches the player before the event and is dropped too)
+        AddTimer(0.1f, () => _api?.RaiseMapCleared());
     }
 
     [ConsoleCommand("fm_clearmap", "fm_clearmap - remove dropped weapons, grenades, bodies and decals (done on every start)")]
@@ -197,11 +204,13 @@ public partial class FakeMimic
 
     // ---------------- recording over a running replay ----------------
 
+    // The player sees the bots about 4 ticks late (interpolation), and the server rewinds them for the
+    // player's shots. The recording's input history carries that interpolation, so the replayed shots are
+    // rewound the same way: the recording starts in the same tick as the replays.
     string RecordOver(string name)
     {
         if (_bc == null) return "CS2-Bot-Controller is not installed";
         if (_replays.Count == 0) return "no bots assigned: Movements > a movement > Play on T/CT bot";
-        // the recording starts in the same tick as the replays
         return Go(() =>
         {
             var p = LocalHuman();
