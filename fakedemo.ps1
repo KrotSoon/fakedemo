@@ -550,6 +550,101 @@ function Vpk-Read([string]$dirFile, $entry) {
   ,$all
 }
 
+# ---------------- skins list ----------------
+# skins.txt next to FakeMimic: what the skins menu offers, read out of the game's own files (pak01): weapon
+# paints come in pairs "[paint]weapon_x" (the cases' loot lists), knife and glove paints are not listed with
+# their items, so knives get the classic knife finishes plus those made for that knife (Lore, Autotronic...)
+# and gloves the paints named after them. Kept in Data until pak01 changes (a CS2 update).
+#   W  def weapon paint legacy name code   WN def weapon name        K def weapon name
+#   KP paint legacy name code [knife]      G  def name               GP paint gloveDef name code
+$KnifeFinishes = @(5, 12, 38, 40, 42, 43, 44, 59, 72, 77, 98, 143, 175, 409, 410, 411, 413, 414) + (415..421) + (568..572) +
+  @(578, 579, 580, 581, 582, 617, 618, 619, 735)
+# paint name part -> the knife it was made for
+$KnifeOwnPaint = [ordered]@{ "m9_bay" = "weapon_knife_m9_bayonet"; "bayonet" = "weapon_bayonet"; "flip" = "weapon_knife_flip"; "gut" = "weapon_knife_gut"
+  "karam" = "weapon_knife_karambit"; "bowie" = "weapon_knife_survival_bowie"; "butterfly" = "weapon_knife_butterfly"; "falchion" = "weapon_knife_falchion"
+  "huntsman" = "weapon_knife_tactical"; "push" = "weapon_knife_push"; "widow" = "weapon_knife_widowmaker" }
+# glove paint name start -> gloves
+$GlovePaintOf = [ordered]@{ "bloodhound_hydra" = "studded_hydra_gloves"; "bloodhound" = "studded_bloodhound_gloves"; "operation10" = "studded_brokenfang_gloves"
+  "glove_sport" = "sporty_gloves"; "sporty" = "sporty_gloves"; "glove_driver" = "slick_gloves"; "slick" = "slick_gloves"; "handwrap" = "leather_handwraps"
+  "motorcycle" = "motorcycle_gloves"; "glove_specialist" = "specialist_gloves"; "specialist" = "specialist_gloves" }
+
+# items_game.txt (KeyValues) -> the blocks under items_game/<section>/<id>: id -> hashtable of their plain keys
+function Kv-Blocks([string[]]$lines, [string[]]$sections) {
+  $out = @{}; foreach ($x in $sections) { $out[$x] = @{} }
+  $stack = New-Object Collections.Generic.List[string]; $pending = $null; $cur = $null
+  foreach ($l in $lines) {
+    $t = $l.Trim()
+    if ($t -eq "{") { $stack.Add($pending); $pending = $null
+      if ($stack.Count -eq 3 -and $out.ContainsKey($stack[1])) { $cur = @{}; $out[$stack[1]][$stack[2]] = $cur } elseif ($stack.Count -ne 4) { $cur = $null }
+      continue }
+    if ($t -eq "}") { if ($stack.Count) { $stack.RemoveAt($stack.Count - 1) }; if ($stack.Count -lt 3) { $cur = $null }; continue }
+    if ($t -match '^"([^"]*)"\s*(?:"((?:[^"\\]|\\.)*)")?') {
+      if ($null -ne $Matches[2]) { if ($cur -and $stack.Count -eq 3) { $cur[$Matches[1]] = $Matches[2] } } else { $pending = $Matches[1] }
+    }
+  }
+  $out
+}
+
+function Build-SkinsList($s) {
+  $pak = Join-Path (Csgo $s) "pak01_dir.vpk"
+  $cache = Join-Path $Data "skins.txt"
+  $stamp = "// pak01 $((Get-Item $pak).LastWriteTimeUtc.Ticks)"
+  if ((Test-Path $cache) -and (Get-Content $cache -TotalCount 1) -eq $stamp) { return $cache }
+  $u = New-Object Text.UTF8Encoding $false
+  $ig = (Vpk-Entries $pak "txt" "scripts/items")["items_game"]
+  $en = (Vpk-Entries $pak "txt" "resource")["csgo_english"]
+  if (-not $ig -or -not $en) { throw "items_game / csgo_english not found in pak01" }
+  $igText = $u.GetString((Vpk-Read $pak $ig))
+  $loc = @{}
+  foreach ($m in [regex]::Matches($u.GetString((Vpk-Read $pak $en)), '(?m)^\s*"([^"]+)"\s+"((?:[^"\\]|\\.)*)"')) {
+    $k = $m.Groups[1].Value.ToLower(); if (-not $loc.ContainsKey($k)) { $loc[$k] = $m.Groups[2].Value }
+  }
+  $name = { param($tag) $v = $loc[([string]$tag).TrimStart('#').ToLower()]; if ($v) { $v -replace '[\t\r\n]', ' ' } else { "" } }
+  $b = Kv-Blocks ($igText -split "`n") @("paint_kits", "items", "prefabs")
+  # an item's name is often in its prefab (weapon_ak47 -> weapon_ak47_prefab)
+  $itemName = { param($it) $n = $it.item_name; $p = $it.prefab
+    while (-not $n -and $p -and $b.prefabs[$p]) { $n = $b.prefabs[$p].item_name; $p = $b.prefabs[$p].prefab }
+    & $name $n }
+  $kits = @{}   # paint name -> id
+  foreach ($id in $b.paint_kits.Keys) { $kits[$b.paint_kits[$id].name] = $id }
+  $defOf = @{}  # weapon -> def
+  foreach ($id in $b.items.Keys) { $n = $b.items[$id].name; if ($n -and -not $defOf.ContainsKey($n)) { $defOf[$n] = $id } }
+  $out = New-Object Collections.Generic.List[string]
+  $out.Add($stamp)
+  # (the paint's own name tells apart the ones with one shown name: Doppler phases, Damascus Steel 90)
+  $kitLine = { param($id) $k = $b.paint_kits[$id]; "$id`t$(if ($k.use_legacy_model -eq '1') { 1 } else { 0 })`t$(& $name $k.description_tag)`t$($k.name)" }
+  # weapons: their names, then every pair once
+  $weapons = @{}
+  foreach ($m in [regex]::Matches($igText, '"\[([a-z0-9_-]+)\](weapon_[a-z0-9_]+)"') | Sort-Object { $_.Groups[2].Value }) {
+    $kit = $kits[$m.Groups[1].Value]; $w = $m.Groups[2].Value; $def = $defOf[$w]
+    if (-not $kit -or -not $def -or $weapons.ContainsKey("$w/$kit")) { continue }
+    $weapons["$w/$kit"] = 1
+    if (-not $weapons.ContainsKey($w)) { $weapons[$w] = 1; $out.Add("WN`t$def`t$w`t$(& $itemName $b.items[$def])") }
+    $out.Add("W`t$def`t$w`t$(& $kitLine $kit)")
+    $weapons["kit/$kit"] = 1
+  }
+  foreach ($id in $b.items.Keys | Where-Object { $_ -match '^\d+$' } | Sort-Object { [int]$_ }) {
+    $it = $b.items[$id]
+    if ($it.prefab -eq "melee_unusual") { $out.Add("K`t$id`t$($it.name)`t$(& $itemName $it)") }
+    elseif ($it.prefab -eq "hands_paintable") { $out.Add("G`t$id`t$(& $itemName $it)") }
+  }
+  foreach ($id in $b.paint_kits.Keys | Where-Object { $_ -match '^\d+$' } | Sort-Object { [int]$_ }) {
+    $k = $b.paint_kits[$id]; $pn = $k.name
+    $own = @($KnifeOwnPaint.Keys | Where-Object { $pn -match "(^|_)$_(_|$)" })
+    # (a gun's paint may have "flip" or "push" in its name too)
+    if ($own.Count -and $pn -notmatch '^glove_' -and -not $weapons.ContainsKey("kit/$id")) { $out.Add("KP`t$(& $kitLine $id)`t$($KnifeOwnPaint[$own[0]])"); continue }
+    if ([int]$id -in $KnifeFinishes) { $out.Add("KP`t$(& $kitLine $id)`t"); continue }
+    if ($k.vmt_path -like "*paints_gloves*" -or $pn -like "glove_*") {
+      $g = @($GlovePaintOf.Keys | Where-Object { $pn.StartsWith($_) })
+      if ($g.Count -and $defOf[$GlovePaintOf[$g[0]]]) { $out.Add("GP`t$id`t$($defOf[$GlovePaintOf[$g[0]]])`t$(& $name $k.description_tag)`t$pn") }
+    }
+  }
+  [IO.File]::WriteAllLines($cache, $out, $u)
+  $count = { param($kind) @($out | Where-Object { $_.StartsWith("$kind`t") }).Count }
+  Log "skins list: $(& $count 'W') weapon skins, $(& $count 'KP') knife and $(& $count 'GP') glove paints"
+  $cache
+}
+
 # map names in a VPK directory: maps/<name>.vpk -> size (the biggest one is the map, others are its 3D sky)
 function Vpk-Maps([string]$file) {
   $maps = @{}
@@ -711,6 +806,9 @@ function Plugins-On($s) {
     $css = "addons\counterstrikesharp"
     Put "$css\plugins\FakeMimic\FakeMimic.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeMimic\FakeMimic.dll") $p }
     Put "$css\plugins\FakeMimic\models.txt" { param($p) Copy-Item (Join-Path $Here "game\models.txt") $p }
+    # the skins menu: without the list it only says so, the game still starts
+    try { $skins = Build-SkinsList $s; Put "$css\plugins\FakeMimic\skins.txt" { param($p) Copy-Item $skins $p } }
+    catch { Log "WARNING skins list not made: $($_.Exception.Message)" }
     Put "$css\shared\FakeMimicApi\FakeMimicApi.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeMimicApi\FakeMimicApi.dll") $p }
     if ($s.FakeDirector) { Put "$css\plugins\FakeDirector\FakeDirector.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeDirector\FakeDirector.dll") $p } }
     if ($s.FakeWallhack) { Put "$css\plugins\FakeWallhack\FakeWallhack.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeWallhack\FakeWallhack.dll") $p } }
@@ -721,6 +819,12 @@ function Plugins-On($s) {
     # admin rights for the local player (css_* commands)
     $sid = (Pick-Account $s).SteamId64
     Put "$css\configs\admins.json" { param($p) Set-Content $p "{ `"fakedemo_owner`": { `"identity`": `"$sid`", `"flags`": [`"@css/root`"] } }" -Encoding ASCII }
+    # skins give items their own ids, which CounterStrikeSharp refuses under "FollowCS2ServerGuidelines" (Valve's
+    # rules for public servers; this one is the local -insecure server of the session, removed after it)
+    $example = Join-Path $script:csgo "$css\configs\core.example.json"
+    Put "$css\configs\core.json" { param($p)
+      $text = if (Test-Path $p) { Get-Content $p -Raw } else { Get-Content $example -Raw }
+      Set-Content $p ($text -replace '"FollowCS2ServerGuidelines"\s*:\s*true', '"FollowCS2ServerGuidelines": false') -Encoding ASCII }
   } finally {
     ConvertTo-Json -InputObject @($script:put) | Set-Content $ManifestFile -Encoding UTF8
   }

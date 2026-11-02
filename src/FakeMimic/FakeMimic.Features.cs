@@ -27,6 +27,7 @@ public class RecordingEdits
     public float Dx, Dy, Dz, Yaw;    // path moved by (Dx,Dy,Dz) after turning it by Yaw around its start
     public bool DieAtEnd;
     public string Model = "";        // character model of the bot, "" = team default (FakeMimic.Models.cs)
+    public string Skins = "";        // weapon paints, knife, gloves of the bot (SkinSet text, FakeMimic.Skins.cs)
 
     public static RecordingEdits Load(string path)
     {
@@ -47,6 +48,7 @@ public class RecordingEdits
                 case "yaw": e.Yaw = F(); break;
                 case "die_at_end": e.DieAtEnd = v == "1"; break;
                 case "model": e.Model = v; break;
+                case "skins": e.Skins = v; break;
             }
         }
         return e;
@@ -61,6 +63,7 @@ public class RecordingEdits
             $"dx={Dx.ToString(ci)}", $"dy={Dy.ToString(ci)}", $"dz={Dz.ToString(ci)}", $"yaw={Yaw.ToString(ci)}",
             $"die_at_end={(DieAtEnd ? 1 : 0)}",
             $"model={Model}",
+            $"skins={Skins}",
         });
     }
 

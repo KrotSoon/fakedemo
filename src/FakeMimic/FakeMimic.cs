@@ -206,6 +206,7 @@ public partial class FakeMimic : BasePlugin
         LoadBotsPrefs();
         LoadCollidePrefs();
         LoadModels();
+        InitSkins();
         if (hotReload)
         {
             AddTimer(1f, TakeOverRespawn);   // no map start after a hot reload
@@ -226,6 +227,7 @@ public partial class FakeMimic : BasePlugin
         AddCommandListener("say_team", OnSay);
         // own configs: a row like a module's (the main screen is full, they share "Modules ›")
         _addonItems.Insert(0, () => new ApiMenuItem("Configs ›", ConfigsMenu) { Value = OwnCfgs().Count.ToString() });
+        _addonItems.Insert(1, () => new ApiMenuItem("Skins ›", pl => SkinsMenu(pl, null)) { Value = _you.Empty ? "" : "on" });
     }
 
     public override void OnAllPluginsLoaded(bool hotReload)
@@ -499,7 +501,8 @@ public partial class FakeMimic : BasePlugin
             Buys = _recBuys ?? new(), History = _bc.GetRecordedInputHistory(slot),
         };
         rec.Save(PathOf(_recName));
-        var msg = $"saved '{_recName}': {rec.Seconds:0.0} s" + (rec.Buys.Count > 0 ? $", {rec.Buys.Count} purchase(s)" : "");
+        var skins = RememberSkins(_recName);
+        var msg = $"saved '{_recName}': {rec.Seconds:0.0} s" + (rec.Buys.Count > 0 ? $", {rec.Buys.Count} purchase(s)" : "") + skins;
         _recBuys = null;
         _api?.RaiseRecording(_recName, false);
         _recName = null;
@@ -614,7 +617,7 @@ public partial class FakeMimic : BasePlugin
             _bc.Lock(r.Bot.Slot, LockKind.All);   // stands at the spawn until the start
         }
         var replays = _replays.ToList();
-        AddTimer(ModelDelay, () => { foreach (var r in replays) ApplyModel(r.Bot!, r.Edits); });
+        AddTimer(ModelDelay, () => { foreach (var r in replays) { ApplyModel(r.Bot!, r.Edits); ApplySkins(r.Bot!, r.Edits); } });
         AddTimer(WeaponsDelay, () =>
         {
             foreach (var r in replays.Where(r => r.Bot is { IsValid: true }))
@@ -1552,6 +1555,7 @@ public partial class FakeMimic : BasePlugin
         Show(p, new Menu(Describe(name), new List<MenuItem>
         {
             new("Play on a bot (T / CT, model)", pl => PlayOnBotMenu(pl, name)),
+            new("Skins of its bot ›", pl => SkinsMenu(pl, name)) { Value = EditsOf(name).Skins == "" ? "" : "on" },
             new($"Timing: {DescribeOffset(EditsOf(name).OffsetTicks)}", pl => TimingMenu(pl, name)),
             new("Path and death", pl => PathMenu(pl, name)),
             new("Rename", pl => AskText(pl, "new name", (pl2, n) => { Say(pl2, Rename(name, n)); RecordingsMenu(pl2); })),
