@@ -38,7 +38,7 @@ $OwnTrees = "addons\metamod", "addons\counterstrikesharp", "addons\BotController
 $SessionPort = 29121
 $SessionPass = -join ((48..57) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
 $CfgFiles = "fd.cfg", "fd_actions.cfg", "fd_blank.cfg", "fd_fake.cfg", "fd_help.cfg", "fd_user.cfg", "fd_unfake.cfg", "gamemode_custom_server.cfg",
-  "fd_ws.cfg", "fd_ws_list.cfg", "fd_own.cfg"
+  "fd_ws.cfg", "fd_ws_list.cfg", "fd_own.cfg", "fd_watch.cfg", "fd_hlae.cfg", "v3_path_rec.cfg", "v3_path_js.cfg"
 $UserCfgDir = Join-Path $Data "configs"
 $KeysFile = Join-Path $Data "keys.json"
 
@@ -117,6 +117,9 @@ function Default-Settings {
     FakeDirector  = $true     # take log add-on for FakeMimic
     FakeWallhack  = $true     # bots and paths through walls add-on
     ExecFd        = $true     # +exec fd on start (the game stays in the main menu)
+    Hlae          = $false    # start CS2 through HLAE (always with -insecure): demos play with mirv_streams
+    HlaePath      = ""        # HLAE.exe; empty = found in Program Files
+    HlaeRecDir    = ""        # where mirv_streams writes (V3 config); empty = Hlae-RecDir's default
     MapKind       = ""        # map to load right away: "" = main menu, "official", "workshop"
     MapId         = ""        # official: map name; workshop: item id
     MapTitle      = ""
@@ -327,6 +330,14 @@ function Build-Unfake($s, [string]$target, [string[]]$touched = @()) {
 # CS2 saves every bind into the Steam profile by itself, so a session that ends without 'unfake' leaves
 # fd_ / fm_ binds there and those keys do nothing in a normal game. With CS2 closed they go back to the
 # clean copy Build-Unfake keeps (unbound when the key had nothing); the file before is kept in backup\
+# a bound command of fake mode (fd_ fm_ fw_) or of V3 (mirv_ and its own aliases): left by a session
+# or a demo that ended without unfake / reset
+$SessionBindRx = '(^|[^a-z])[+-]?(fd_|fm_|fw_)|(^|[; ])mirv_|^\+v3shift$|^ac(_| |$)|^(recF[1-4]|playbackPause|campathPlayback|hideCampath|localMouseAxis|demoui|speed_(in|de)crease|resetkf|f3s|b3|blur|dof|hud|red|next_dof_state|prev_dof_state)(;|$)'
+function Has-SessionBinds([string]$f) {
+  foreach ($l in [IO.File]::ReadAllLines($f)) { if ($l -match '^\s*"[^"]+"\s+"([^"]*)"\s*$' -and $Matches[1] -match $SessionBindRx) { return $true } }
+  $false
+}
+
 function Restore-OwnKeys($s, [switch]$AfterSession) {
   if (Cs2-Running) { return }
   $acc = try { Pick-Account $s } catch { return }
@@ -335,7 +346,7 @@ function Restore-OwnKeys($s, [switch]$AfterSession) {
   $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
   if ($AfterSession -and (Test-Path $snapshot) -and (Test-Path $acc.Keys) -and
       (Get-FileHash $snapshot).Hash -ne (Get-FileHash $acc.Keys).Hash -and
-      -not (Select-String -Path $snapshot -Pattern '"[+-]?fd_|"fm_|"fw_' -Quiet)) {
+      -not (Has-SessionBinds $snapshot)) {
     Copy-Item $acc.Keys (Join-Path $Data "backup\keys_$($acc.Id)_with_fake_binds.vcfg") -Force
     Copy-Item $snapshot $acc.Keys -Force
     Log "your Steam binds: back to the copy taken before the game started"
@@ -343,7 +354,7 @@ function Restore-OwnKeys($s, [switch]$AfterSession) {
   }
   # only the local file: editing the Steam Cloud copy (remote\cs2_user_keys.vcfg) made Steam refuse to
   # sync it. The cloud copy stays clean because FakeMimic runs fd_unfake before the game quits
-  $files = @($acc.Keys) | Where-Object { (Test-Path $_) -and (Select-String -Path $_ -Pattern '"[+-]?fd_|"fm_|"fw_' -Quiet) }
+  $files = @($acc.Keys) | Where-Object { (Test-Path $_) -and (Has-SessionBinds $_) }
   if (-not $files) { return }
   $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
   $own = @{}
@@ -353,7 +364,7 @@ function Restore-OwnKeys($s, [switch]$AfterSession) {
   foreach ($f in $files) {
     $out = foreach ($l in [IO.File]::ReadAllLines($f)) {
       $m = [regex]::Match($l, '^(\s*)"([^"]+)"(\s+)"([^"]*)"\s*$')
-      if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, '(^|[^a-z])[+-]?(fd_|fm_|fw_)')) {
+      if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, $SessionBindRx)) {
         $k = $m.Groups[2].Value; $n++
         $v = if ($own[$k.ToUpper()]) { $own[$k.ToUpper()] } else { "<unbound>" }
         "$($m.Groups[1].Value)`"$k`"$($m.Groups[3].Value)`"$v`""
@@ -385,7 +396,42 @@ function Install-Cfg($s) {
   # binds are not worth blocking the game for: the previous fd_unfake.cfg stays
   $touched = @()
   try { $touched = @(Install-UserCfgs $cfg) } catch { Log "WARNING your configs not installed: $($_.Exception.Message)" }
+  # V3 sets fps_max 120 for its playback speeds, and the game saves it: after the demo yours comes back
+  if ($s.Hlae) { $touched += "fps_max" }
   try { Build-Unfake $s (Join-Path $cfg "fd_unfake.cfg") $touched } catch { Log "WARNING fd_unfake.cfg not rebuilt: $($_.Exception.Message)" }
+  if ($s.Hlae) { try { Install-V3 $s $cfg } catch { Log "WARNING V3 not installed: $($_.Exception.Message)" } }
+  # Watch (H > Demos, launcher) runs it before playdemo: V3 sets fps_max, which the game refuses inside a demo
+  [IO.File]::WriteAllText((Join-Path $cfg "fd_watch.cfg"), $(if ($s.Hlae) { "exec v3`r`n" } else { "// not through HLAE: nothing before the demo`r`n" }))
+}
+
+# ---------------- V3 (editing config for HLAE) ----------------
+
+# the V3 files go into the cfg root as they always were (they exec each other as v3_*); the ones written
+# here are in $CfgFiles. Uninstall leaves V3 itself: it may have been there before FakeDemo
+function Hlae-RecDir($s) {
+  if ($s.HlaeRecDir) { return $s.HlaeRecDir }
+  # mirv_streams gets the folder as a console line: a latin path is the safe one
+  if ($Data -match '^[\x20-\x7E]+$') { Join-Path $Data "HLAE" } else { Join-Path $env:SystemDrive "FakeDemo HLAE" }
+}
+
+function Install-V3($s, [string]$cfg) {
+  foreach ($f in Get-ChildItem (Join-Path $Here "game\v3") -File -Include *.cfg, *.js -Recurse) {
+    $dst = Join-Path $cfg $f.Name
+    # the one file V3 says to edit: an existing one is yours (also an older V3 with its own folder in it)
+    if ($f.Name -eq "v3_user.cfg" -and (Test-Path $dst)) {
+      if (-not (Select-String -Path $dst -Pattern 'exec v3_path_rec' -Quiet)) { Log "v3_user.cfg is your own one: the recording folder is the one in it" }
+      continue
+    }
+    Copy-Item $f.FullName $dst -Force
+  }
+  $rec = Hlae-RecDir $s
+  New-Item -ItemType Directory -Force $rec | Out-Null
+  $w = { param($name, $text) [IO.File]::WriteAllText((Join-Path $cfg $name), "$text`r`n") }
+  & $w "v3_path_rec.cfg" "mirv_streams record name `"$rec`""
+  # mirv_script_load wants a full path
+  & $w "v3_path_js.cfg" "mirv_script_load `"$(Join-Path $cfg 'v3_attach.js')`""
+  & $w "fd_hlae.cfg" "mirv_script_load `"$(Join-Path $cfg 'fd_v3.js')`""
+  Log "V3 copied to $cfg, recordings go to $rec"
 }
 
 # ---------------- maps ----------------
@@ -700,7 +746,8 @@ function Netcon-Of($s) {
 
 function Launch-Args($s) {
   $a = @()
-  if ($s.Plugins) { $a += "-insecure" }
+  # HLAE hooks the game: never without -insecure, the same as the plugins
+  if ($s.Plugins -or $s.Hlae) { $a += "-insecure" }
   $nc = Netcon-Of $s
   if ($nc.Port) {
     $a += "-netconport", $nc.Port
@@ -709,6 +756,8 @@ function Launch-Args($s) {
   if ($s.LaunchOptions) { $a += ($s.LaunchOptions -split '\s+' | Where-Object { $_ }) }
   # a map needs the custom mode from exec fd, or fd_fake.cfg does not run on it
   if ($s.ExecFd -or $s.MapId) { $a += "+exec", "fd" }
+  # fd_v3.js: V3 keys in a demo, fake keys after it
+  if ($s.Hlae) { $a += "+exec", "fd_hlae" }
   # a workshop map is not mounted yet when the command line runs: Load-WorkshopMap types it in later
   if ($s.MapId -and $s.MapKind -ne "workshop") { $a += "+map", $s.MapId }
   $a
@@ -801,14 +850,38 @@ function Start-Overlay {
   Log "menu window started"
 }
 
+# ---------------- HLAE ----------------
+# With "through HLAE" on, HLAE starts the game itself (it must hook it from the first moment): the fake
+# session runs with HLAE, so a demo recorded there plays with mirv_streams right away (H > Demos > Watch)
+function Find-Hlae($s) {
+  foreach ($p in @($s.HlaePath, "${env:ProgramFiles(x86)}\HLAE\HLAE.exe", "$env:ProgramFiles\HLAE\HLAE.exe")) {
+    if ($p -and (Test-Path $p) -and (Test-Path (Join-Path (Split-Path $p) "x64\AfxHookSource2.dll"))) { return $p }
+  }
+  $null
+}
+
+function Start-Cs2($s, [string[]]$a) {
+  if (-not $s.Hlae) {
+    Log "starting CS2: $($a -join ' ')"
+    Start-Process (Join-Path (Steam-Path) "steam.exe") -ArgumentList (@("-applaunch", "730") + $a)
+    return
+  }
+  $hlae = Find-Hlae $s
+  if (-not $hlae) { throw "HLAE not found: install it (advancedfx.org) or set its folder in the launcher" }
+  if ($a -notcontains "-insecure") { throw "HLAE only with -insecure" }
+  $cs2 = Join-Path $s.Cs2Path "game\bin\win64\cs2.exe"
+  $line = (@("-steam") + $a | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
+  Log "starting CS2 through HLAE: $line"
+  Start-Process $hlae -ArgumentList "-customLoader", "-noGui", "-autoStart",
+    "-hookDllPath", "`"$(Join-Path (Split-Path $hlae) 'x64\AfxHookSource2.dll')`"", "-programPath", "`"$cs2`"", "-cmdLine", "`"$($line -replace '"', '\"')`""
+}
+
 function Play($s) {
   Need-Closed
   Restore-OwnKeys $s   # before Build-Unfake reads them: a clean profile refreshes the clean copy
   Install-Cfg $s
   if ($s.Plugins) { Plugins-On $s } elseif ((Load-Manifest).Count) { Plugins-Off $s }
-  $a = Launch-Args $s
-  Log "starting CS2: $($a -join ' ')"
-  Start-Process (Join-Path (Steam-Path) "steam.exe") -ArgumentList (@("-applaunch", "730") + $a)
+  Start-Cs2 $s (Launch-Args $s)
   $workshop = $s.MapKind -eq "workshop" -and $s.MapId
   if (-not $s.Plugins) {
     if ($workshop) { Wait-Cs2Start; Load-WorkshopMap $s }

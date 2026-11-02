@@ -302,7 +302,8 @@ public class FakeDirector : BasePlugin
                 Thread.Sleep(300);
                 using var c = new System.Net.Sockets.TcpClient("127.0.0.1", port);
                 var s = c.GetStream();
-                var text = System.Text.Encoding.UTF8.GetBytes((pass != null ? $"PASS {pass}\n" : "") + $"playdemo {demo}\n");
+                // fd_watch.cfg: through HLAE it runs V3 first (fps_max cannot change inside a demo)
+                var text = System.Text.Encoding.UTF8.GetBytes((pass != null ? $"PASS {pass}\n" : "") + $"exec fd_watch\nplaydemo {demo}\n");
                 s.Write(text, 0, text.Length);
                 Thread.Sleep(500);
             }

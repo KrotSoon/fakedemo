@@ -511,6 +511,23 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           </DockPanel>
         </Border>
 
+        <Border Style="{StaticResource Card}" Margin="0,8,0,0">
+          <DockPanel>
+            <CheckBox x:Name="SwHlae" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Label}" Text="Запуск через HLAE"/>
+              <TextBlock x:Name="HlaeHint" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <TextBlock Style="{StaticResource Caption}" Text="Папка записи HLAE (конфиг V3)"/>
+        <DockPanel>
+          <Button x:Name="BtnRecDir" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="Обзор" Margin="8,0,0,0"/>
+          <TextBox x:Name="TbRecDir" Style="{StaticResource Field}" IsReadOnly="True"/>
+        </DockPanel>
+        <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" TextWrapping="Wrap" Text="в демке через HLAE сам включается V3 (fehelp — клавиши), после демки возвращаются клавиши fake"/>
+
         <Grid>
           <Grid.ColumnDefinitions><ColumnDefinition Width="118"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <TextBlock Style="{StaticResource Caption}" Text="Порт netcon"/>
@@ -635,13 +652,23 @@ function Load-Controls {
   (El "SwDirector").IsChecked = [bool]$s.FakeDirector
   (El "SwWallhack").IsChecked = [bool]$s.FakeWallhack
   (El "SwExecFd").IsChecked = [bool]$s.ExecFd
+  (El "SwHlae").IsChecked = [bool]$s.Hlae
+  Update-HlaeHint
   (El "TbCs2").Text = $s.Cs2Path
   (El "TbOptions").Text = $s.LaunchOptions
+  (El "TbRecDir").Text = Hlae-RecDir $s
   (El "TbPort").Text = [string]$s.NetconPort
   (El "TbPass").Text = $s.NetconPassword
   Fill-Accounts
   $script:loading = $false
   Update-Summary
+}
+
+function Update-HlaeHint {
+  $h = Find-Hlae $script:s
+  (El "SwHlae").IsEnabled = [bool]$h -or [bool]$script:s.Hlae
+  (El "HlaeHint").Text = $(if ($h) { "игра и демки с HLAE (mirv_streams для слоёв), всегда с -insecure · $(Split-Path $h)" }
+    else { "HLAE не найден: поставь его с advancedfx.org (в Program Files\HLAE)" })
 }
 
 # what Play will do, in one line under the button
@@ -652,7 +679,7 @@ function Update-Summary {
   (El "Modules").Opacity = $(if ($s.Plugins) { 1 } else { 0.45 })
   (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
   $where = if ($s.MapId) { $s.MapTitle } else { "главное меню" }
-  (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })"
+  (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })$(if ($s.Hlae) { ' · через HLAE' })"
   Update-MapCard
 }
 
@@ -1021,6 +1048,7 @@ function Watch-Take($t) {
       $c.Connect("127.0.0.1", $nc.Port)
       $st = $c.GetStream()
       if ($nc.Pass) { Netcon-Send $st "PASS $($nc.Pass)" }
+      Netcon-Send $st "exec fd_watch"   # through HLAE: exec v3 (fps_max) before the demo
       Netcon-Send $st "playdemo $demo"
       Start-Sleep -Milliseconds 300
     } finally { $c.Close() }
@@ -1028,8 +1056,11 @@ function Watch-Take($t) {
     return
   }
   if ((Status $script:s).PluginsOn) { Show-Error "Плагины остались в игре: сначала «Снять плагины», потом смотреть"; return }
-  Start-Process (Join-Path (Steam-Path) "steam.exe") -ArgumentList "-applaunch", "730", "+playdemo", $demo
-  Show-Info "Запускаю CS2 с демкой $demo…"
+  # through HLAE (setting): the demo opens with V3 and mirv_streams for the layers; HLAE only with -insecure.
+  # The configs first: V3, its paths and fd_unfake (your binds after the demo) may not be in the game yet
+  if ($script:s.Hlae) { Restore-OwnKeys $script:s; Install-Cfg $script:s }
+  Start-Cs2 $script:s $(if ($script:s.Hlae) { @("-insecure", "+exec", "fd_hlae", "+exec", "fd_watch", "+playdemo", $demo) } else { @("+playdemo", $demo) })
+  Show-Info "Запускаю CS2 с демкой $demo$(if ($script:s.Hlae) { ' через HLAE' })…"
 }
 
 # names as in the game: latin letters, digits, _ and - (the demo is played by this name)
@@ -1396,10 +1427,20 @@ public static class FolderPicker {
   $script:s.Cs2Path = $path; (El "TbCs2").Text = $path; Save; Refresh
 })
 
+(El "BtnRecDir").Add_Click({
+  $owner = (New-Object Windows.Interop.WindowInteropHelper $win).Handle
+  $path = [FolderPicker]::Pick($owner, "Папка для записи HLAE", (Hlae-RecDir $script:s))
+  if (-not $path) { return }
+  # the cfg line is plain text in the game's console: keep to paths that surely survive it
+  if ($path -notmatch '^[\x20-\x7E]+$' -or $path -match '"') { Show-Error "Только латиница в пути: путь с русскими буквами CS2 может не прочитать"; return }
+  $script:s.HlaeRecDir = $path; (El "TbRecDir").Text = $path; Save
+})
+
 (El "SwPlugins").Add_Click({ $script:s.Plugins = [bool](El "SwPlugins").IsChecked; Save; Update-Summary })
 (El "SwDirector").Add_Click({ $script:s.FakeDirector = [bool](El "SwDirector").IsChecked; Save })
 (El "SwWallhack").Add_Click({ $script:s.FakeWallhack = [bool](El "SwWallhack").IsChecked; Save })
 (El "SwExecFd").Add_Click({ $script:s.ExecFd = [bool](El "SwExecFd").IsChecked; Save; Update-Summary })
+(El "SwHlae").Add_Click({ $script:s.Hlae = [bool](El "SwHlae").IsChecked; Save; Update-Summary })
 # fields save on every change: going Back or pressing Play while still typing kept no lost focus,
 # and the value was gone
 (El "TbOptions").Add_TextChanged({ $script:s.LaunchOptions = (El "TbOptions").Text.Trim(); Save })
