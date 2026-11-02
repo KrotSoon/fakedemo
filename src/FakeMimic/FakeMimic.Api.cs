@@ -95,7 +95,8 @@ public partial class FakeMimic
         {
             var r = plugin._replays.FirstOrDefault(x => x.Bot is { IsValid: true } b && b.Slot == botSlot);
             if (r == null || plugin._bc == null) return -1;
-            if (plugin._bc.IsReplaying(botSlot)) return plugin._bc.ReplayCursor(botSlot);
+            if (r.PausedAt >= 0) return r.PausedAt;
+            if (plugin._bc.IsReplaying(botSlot)) return plugin.Cursor(r);
             return r.Ended ? Math.Max(0, r.Length - 1) : 0;
         }
 

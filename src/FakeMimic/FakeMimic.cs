@@ -139,6 +139,11 @@ class Replay
     public int NextBuy;
     public bool Ended;        // played to the end since the last start
     public int Length;        // ticks of the prepared recording
+    public Recording? Prepared;   // as it plays since the last start
+    public int[]? Map;            // tick of Prepared for each loaded tick (after a collision), null: the same
+    public int PausedAt = -1;     // stopped in front of a player: the tick to go on from
+    public int BrakeTo = -1;      // braking: the tick to go on from once stopped
+    public int ClearSince = -1;   // server tick since which its way is clear (paused)
 }
 
 public partial class FakeMimic : BasePlugin
@@ -199,6 +204,7 @@ public partial class FakeMimic : BasePlugin
         RegisterListener<Listeners.OnCustomHudClicked>(OnHudClicked);
         LoadMenuPrefs();
         LoadBotsPrefs();
+        LoadCollidePrefs();
         LoadModels();
         if (hotReload)
         {
@@ -240,19 +246,27 @@ public partial class FakeMimic : BasePlugin
         {
             if (!r.Running || r.Bot is not { IsValid: true }) continue;
             var slot = r.Bot.Slot;
+            if (r.PausedAt >= 0)
+            {
+                if (_collide) StepBack(r);
+                if (!_collide || MayResume(r)) Resume(r);
+                continue;
+            }
             if (!_bc.IsReplaying(slot))
             {
+                if (r.BrakeTo >= 0) { Pause(r, r.BrakeTo); continue; }   // braked to a stop in front of a player
                 r.Running = false;
                 r.Ended = true;
                 OnReplayEnd(r);
                 continue;
             }
+            if (_collide && (r.BrakeTo < 0 ? CheckCollision(r) : StopBraking(r))) continue;
             // purchases BuyLeadTicks before the recorded one: the player had the weapon in hand a tick before
             // item_purchase came, and CS2-Bot-Controller picks up the recorded weapon only in the tick it changed
             // (a weapon given later stayed in the bag: the bot shot the whole movement with its pistol)
             if (r.NextBuy < r.Buys.Count)
             {
-                var at = _bc.ReplayCursor(slot) + BuyLeadTicks;
+                var at = Cursor(r) + BuyLeadTicks;
                 while (r.NextBuy < r.Buys.Count && r.Buys[r.NextBuy].Tick <= at) Buy(r.Bot, r.Buys[r.NextBuy++].Item);
             }
             KeepWeapon(r, slot);
@@ -591,6 +605,7 @@ public partial class FakeMimic : BasePlugin
         {
             _bc.StopReplay(r.Bot!.Slot);
             r.Running = false;
+            (r.PausedAt, r.BrakeTo) = (-1, -1);
             r.Bot.Respawn();
             _bc.Lock(r.Bot.Slot, LockKind.All);   // stands at the spawn until the start
         }
@@ -615,6 +630,7 @@ public partial class FakeMimic : BasePlugin
                 r.WrongWeapon = 0;
                 var rec = Prepare(r.Rec, r.Edits);
                 (r.Buys, r.NextBuy, r.Ended, r.Length) = (WithMissingGuns(rec), 0, false, rec.Ticks.Length);
+                (r.Prepared, r.Map, r.PausedAt, r.BrakeTo) = (rec, null, -1, -1);
                 // without the history if this CS2-Bot-Controller does not take it (another build than the recording's)
                 if (!_bc.SetReplayPawn(bot.Slot, pawn.Handle))
                 {
@@ -662,6 +678,7 @@ public partial class FakeMimic : BasePlugin
             _bc?.StopReplay(r.Bot!.Slot);
             _bc?.Lock(r.Bot!.Slot, LockKind.All);
             r.Running = false;
+            (r.PausedAt, r.BrakeTo) = (-1, -1);
         }
         return "replays stopped";
     }
@@ -1332,6 +1349,16 @@ public partial class FakeMimic : BasePlugin
                 MainMenu(pl);
             },
         });
+        items.Add(new("Collisions", _ => { })
+        {
+            Kind = ApiRowKind.Choice, Options = new[] { "Off", "On" }, Selected = _collide ? 1 : 0,
+            Choose = (pl, i) =>
+            {
+                SetCollide(i == 1);
+                Say(pl, _collide ? "collisions on: a bot stops in front of you and goes on when you step aside" : "collisions off: bots go through players");
+                MainMenu(pl);
+            },
+        });
         items.Add(new("Clear assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
         if (_take == null)
             items.Add(new("Record demo (bots play)", pl => Say(pl, StartTake())));
@@ -1564,8 +1591,8 @@ public partial class FakeMimic : BasePlugin
             var o = p.PlayerPawn.Value?.AbsOrigin;
             var r = _replays.FirstOrDefault(x => x.Bot == p);
             var wpn = p.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value;
-            cmd.ReplyToCommand($"[FM] {p.PlayerName} alive={p.PawnIsAlive} hp={p.PlayerPawn.Value?.Health} speed={p.PlayerPawn.Value?.AbsVelocity.Length2D():0} pos={o?.X:0},{o?.Y:0},{o?.Z:0} weapon={wpn?.DesignerName}:{wpn?.Clip1}" +
-                               (r != null && _bc != null ? $" replay={r.Name} {_bc.ReplayCursor(p.Slot)}/{_bc.ReplayTotal(p.Slot)}" : ""));
+            cmd.ReplyToCommand($"[FM] {p.PlayerName} alive={p.PawnIsAlive} hp={p.PlayerPawn.Value?.Health} speed={p.PlayerPawn.Value?.AbsVelocity.Length2D():0} pos={o?.X:0},{o?.Y:0},{o?.Z:0} weapon={wpn?.DesignerName}:{wpn?.Clip1} col={p.PlayerPawn.Value?.Collision.CollisionGroup}" +
+                               (r != null && _bc != null ? $" replay={r.Name} {(r.PausedAt >= 0 ? r.PausedAt : _bc.IsReplaying(p.Slot) ? Cursor(r) : -1)}/{r.Length}{(r.PausedAt >= 0 ? " paused" : "")}" : ""));
         }
     }
 
