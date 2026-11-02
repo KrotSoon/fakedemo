@@ -1427,12 +1427,73 @@ public partial class FakeMimic : BasePlugin
         Say(p, $"1 = record as '{name}', or type your own name in chat");
     }
 
+    // Rename / Delete act on the current folder. A rename takes its demos along (takes/<map>/<folder> and
+    // the folder in takes.json, or Demos lost them); a delete sends the movements to the Recycle Bin and
+    // leaves the demos (they still play with Watch)
+    void RenameFolder(CCSPlayerController p) => AskText(p, $"new name for folder '{_category}'", (pl, n) =>
+    {
+        Say(pl, RenameFolder(_category, n));
+        CategoriesMenu(pl);
+    });
+
+    string RenameFolder(string from, string to)
+    {
+        var dir = Path.Combine(MapRoot, from);
+        if (from == to) return "same name";
+        if (Directory.Exists(Path.Combine(MapRoot, to))) return $"folder '{to}' already exists";
+        if (_recName != null || _take != null) return "stop the recording first";
+        if (Directory.Exists(dir)) Directory.Move(dir, Path.Combine(MapRoot, to));
+        var takes = Path.Combine(FakeDemoPaths.Takes, Server.MapName, from);
+        if (Directory.Exists(takes))
+        {
+            var moved = Path.Combine(FakeDemoPaths.Takes, Server.MapName, to);
+            Directory.Move(takes, moved);
+            var log = Path.Combine(moved, "takes.json");
+            if (File.Exists(log))
+                File.WriteAllText(log, System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(log),
+                    $"(\"Folder\"\\s*:\\s*)\"{System.Text.RegularExpressions.Regex.Escape(from)}\"", $"$1\"{to}\""));
+        }
+        if (_category == from) _category = to;
+        File.WriteAllLines(RecentPath, RecentFolders().Prepend(_category).Distinct());   // the renamed one moved to the end
+        return $"folder '{from}' renamed to '{to}'";
+    }
+
+    void DeleteFolderMenu(CCSPlayerController p)
+    {
+        var name = _category;
+        var count = Names().Count();
+        Show(p, new Menu($"Delete folder '{name}'?", new List<MenuItem>
+        {
+            new($"Delete {count} movement(s)", pl => { Say(pl, DeleteFolder(name)); CategoriesMenu(pl); }, Accent: true),
+            new("← Back", CategoriesMenu),
+        }));
+    }
+
+    string DeleteFolder(string name)
+    {
+        if (_recName != null || _take != null) return "stop the recording first";
+        var dir = Path.Combine(MapRoot, name);
+        // its bots go too
+        if (name == _category) Clear();
+        if (Directory.Exists(dir))
+            Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(dir, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+        if (name == _category) _category = Categories().FirstOrDefault(c => c != name) ?? "default";
+        File.WriteAllLines(RecentPath, RecentFolders());
+        return $"folder '{name}' moved to the Recycle Bin, now in '{_category}'";
+    }
+
     // all folders of the map, by name, 6 per page
     void CategoriesMenu(CCSPlayerController p) => CategoriesMenu(p, 0);
 
     void CategoriesMenu(CCSPlayerController p, int page)
     {
-        var entries = new List<MenuItem> { new("+ New folder", NewFolder) };
+        var entries = new List<MenuItem>
+        {
+            new("+ New folder", NewFolder),
+            new($"Rename '{_category}'", RenameFolder),
+            new($"Delete '{_category}'", DeleteFolderMenu),
+        };
         entries.AddRange(Categories().Select(c => new MenuItem(c, pl => { SetFolder(c); Say(pl, $"folder: {c}"); MainMenu(pl); })
             { Value = c == _category ? "current" : null, On = c == _category }));
         ShowPaged(p, $"Folders on {Server.MapName}", entries, page, CategoriesMenu, MainMenu);
