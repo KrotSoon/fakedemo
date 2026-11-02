@@ -134,6 +134,13 @@ body { font-family: Bahnschrift, "Segoe UI", sans-serif; display: inline-block; 
 .SubLast { border-bottom: 1px solid #e4ae3955; border-radius: 0 0 14px 14px; padding-bottom: 8px; }
 .SubFirst.SubLast { border-radius: 14px; }
 
+/* ---- a name typed here (Enter sends it, Esc cancels) ---- */
+.Ask { margin: 0 6px 10px 0; }
+.Ask input { width: 100%; box-sizing: border-box; height: 40px; padding: 0 14px; border-radius: 14px; border: 2px solid #e4ae3970;
+  background: #00000055; color: #fff; font: inherit; font-size: 16px; outline: none; }
+.Ask input:focus { border-color: #e4ae39; }
+.Ask input::placeholder { color: #ffffff60; }
+
 /* ---- size: drag the corner ---- */
 #grip { position: absolute; right: 4px; bottom: 4px; width: 18px; height: 18px; cursor: nwse-resize; opacity: .35; transition: opacity .1s; }
 #grip:hover, #grip.On { opacity: 1; }
@@ -235,6 +242,21 @@ function render(m) {
   last = m.title;
   title.textContent = m.title;
   rows.replaceChildren(...m.rows.map((r, i) => row(r, i + 1, m.rows)));
+  if (m.ask != null) {
+    // the window takes the keyboard from the game for the field and gives it back after Enter / Esc
+    const a = el("div", "Row Ask"), f = el("input");
+    f.placeholder = m.ask || "name";
+    f.maxLength = 64;
+    f.onkeydown = e => {
+      if (e.key === "Enter") { send("text " + f.value); e.preventDefault(); }
+      else if (e.key === "Escape") { send("text "); e.preventDefault(); }
+    };
+    f.onmousedown = () => send("focus");
+    a.append(f);
+    rows.prepend(a);
+    send("focus");
+    setTimeout(() => f.focus(), 50);
+  }
   if (m.close) {
     const c = el("div", "Row"), b = el("div", "Item Close");
     b.append(el("div", "Key", 9), el("div", "ItemText", m.close));

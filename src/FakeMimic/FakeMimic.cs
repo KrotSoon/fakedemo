@@ -221,6 +221,8 @@ public partial class FakeMimic : BasePlugin
             Logger.LogInformation("precached HUD layout and {Count} character models", _models.Count);
         });
         AddCommandListener("say", OnSay);
+        AddCommandListener("quit", OnQuit);
+        AddCommandListener("exit", OnQuit);
         AddCommandListener("say_team", OnSay);
     }
 
@@ -914,6 +916,7 @@ public partial class FakeMimic : BasePlugin
             title = Plain(m.Title),
             close = m.Main ? "Close" : m.Back != null ? "← Back" : "",
             x = _menuX, y = _menuY, s = _menuS,
+            ask = _awaitText != null ? _askPrompt ?? "" : null,   // a text field on top; Enter sends fm_text
             rows = m.Items.Take(8).Select(i => new
             {
                 t = Plain(i.Text), kind = i.Kind.ToString(), accent = i.Accent, on = i.On, val = i.Value,
@@ -1278,25 +1281,49 @@ public partial class FakeMimic : BasePlugin
 
     bool _awaitRaw;   // free text (a note), not a name
 
+    string? _askPrompt;   // shown above the text field of the menu window
+
+    // In the menu window the question is a screen of its own with a text field (Enter sends fm_text); in
+    // the HUD the answer is typed in chat
     void AskText(CCSPlayerController p, string prompt, Action<CCSPlayerController, string> then, bool raw = false)
     {
         _awaitText = then;
         _awaitRaw = raw;
-        Say(p, prompt + " (type it in chat, empty = cancel)");
+        _askPrompt = prompt;
+        if (!Overlay) { Say(p, prompt + " (type it in chat, empty = cancel)"); return; }
+        Show(p, new Menu(prompt, new List<MenuItem> { new("Cancel", pl => { Say(pl, "cancelled"); MainMenu(pl); }) }));
+        _askScreen = _menu;
     }
+
+    Menu? _askScreen;
 
     HookResult OnSay(CCSPlayerController? p, CommandInfo cmd)
     {
         if (_awaitText == null || p == null) return HookResult.Continue;
         // the whole line: "say a b" from the console arrives as two arguments, from the chat as one quoted
-        var text = cmd.ArgString.Trim().Trim('"').Trim();
-        var then = _awaitText;
+        Answer(p, cmd.ArgString.Trim().Trim('"').Trim());
+        return HookResult.Handled;   // the name does not appear in chat
+    }
+
+    [ConsoleCommand("fm_text", "fm_text <text> - the answer typed in the menu window")]
+    public void CmdText(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        if (_awaitText == null || (caller ?? LocalHuman()) is not { } p) return;
+        Answer(p, cmd.ArgString.Trim().Trim('"').Trim());
+    }
+
+    void Answer(CCSPlayerController p, string text)
+    {
+        var then = _awaitText!;
         _awaitText = null;
+        var screen = _askScreen;
+        var asked = screen != null && _menu == screen;
+        _askScreen = null;
         // names: only latin letters, digits, _ and - (also used as file and folder names)
         var clean = _awaitRaw ? text : new string(text.Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').ToArray());
-        if (clean.Length == 0) Say(p, "cancelled");
-        else then(p, clean);
-        return HookResult.Handled;   // the name does not appear in chat
+        if (clean.Length == 0) { Say(p, "cancelled"); if (asked) MainMenu(p); return; }
+        then(p, clean);
+        if (asked && _menu == screen) CloseMenu(p);   // the answer opened no screen of its own
     }
 
     // Folder on top (recent folders as segments), then one big button for what to do now (record, or stop
@@ -1418,13 +1445,14 @@ public partial class FakeMimic : BasePlugin
             Say(pl, _replays.Count > 0 ? RecordOver(n) : StartRec(n) + " H > 1 to stop");
             if (_menu != null) CloseMenu(pl);   // typed in chat: the menu is still open
         }
+        // set before Show: the menu window draws a text field for it
+        (_awaitText, _awaitRaw, _askPrompt) = (Record, false, "or type your own name");
         Show(p, new Menu("New movement", new List<MenuItem>
         {
             new($"Record as '{name}'", pl => Record(pl, name)),
             new("← Back", MainMenu),
         }));
-        _awaitText = Record;
-        Say(p, $"1 = record as '{name}', or type your own name in chat");
+        Say(p, Overlay ? $"1 = record as '{name}', or type a name above" : $"1 = record as '{name}', or type your own name in chat");
     }
 
     // Rename / Delete act on the current folder. A rename takes its demos along (takes/<map>/<folder> and

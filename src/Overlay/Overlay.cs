@@ -147,6 +147,8 @@ class OverlayForm : Form
         if (line[at + 4] != '.') return;
         var json = _json.ToString();
         _json.Clear();
+        // a screen without a text field (Cancel, the next screen) or no menu: the keyboard goes back to the game
+        if (!json.Contains("\"ask\":\"") && Native.GetForegroundWindow() == Handle) Native.GiveBackKeyboard();
         if (json.Contains("\"closed\":true")) { _open = false; Hide(); _glass.Hide(); CenterCursor(); return; }
         var x = Int(json, "x"); var y = Int(json, "y");
         if (!_open)
@@ -189,11 +191,29 @@ class OverlayForm : Form
             SetBounds(at.X - _menu.X, at.Y - _menu.Y, v[0], v[1]);
             FitGlass();
         }
+        else if (msg == "focus") TakeKeyboard();
+        else if (msg.StartsWith("text "))
+        {
+            // the console line must stay one command with one quoted argument
+            var text = new string(msg.Substring(5).Where(c => c != '"' && c != ';' && !char.IsControl(c)).ToArray()).Trim();
+            _nc.Send($"fm_text \"{text}\"");
+            Native.GiveBackKeyboard();
+        }
         else if (msg == "drag")
         {
             _dragFrom = Cursor.Position; _dragWin = MenuAt;
             _drag.Start();
         }
+    }
+
+    // A text field needs the keyboard, which stays with the game (the window never activates on a click):
+    // the window is made the foreground one for the field. Windows lets only the foreground process do
+    // that, so the call runs attached to the game's input thread
+    void TakeKeyboard()
+    {
+        if (Native.GetForegroundWindow() == Handle) { _web.Focus(); return; }
+        Native.ForceForeground(Handle);
+        _web.Focus();
     }
 
     // the page only says the drag began: the window follows the real cursor until the button is up
@@ -385,6 +405,31 @@ static class Native
         catch (Exception) { return false; }
         _gamePid = pid;
         return true;
+    }
+
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+
+    static IntPtr _gameWindow;   // the one that had the keyboard before a text field took it
+
+    // the foreground window may hand the foreground on; attached to its input thread, this process may too
+    public static void ForceForeground(IntPtr h)
+    {
+        var fg = GetForegroundWindow();
+        if (IsGame(fg)) _gameWindow = fg;
+        var other = GetWindowThreadProcessId(fg, out _);
+        var self = GetCurrentThreadId();
+        var attached = other != self && AttachThreadInput(self, other, true);
+        SetForegroundWindow(h);
+        if (attached) AttachThreadInput(self, other, false);
+    }
+
+    // after Enter / Esc in a text field the game gets the keyboard back
+    public static void GiveBackKeyboard()
+    {
+        if (_gameWindow != IntPtr.Zero) SetForegroundWindow(_gameWindow);
+        _gameWindow = IntPtr.Zero;
     }
 
     public const int AccentTransparent = 2, AccentBlur = 3;

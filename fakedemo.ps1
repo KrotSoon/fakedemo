@@ -259,21 +259,26 @@ function Build-Unfake($s, [string]$target) {
 function Restore-OwnKeys($s) {
   if (Cs2-Running) { return }
   $acc = try { Pick-Account $s } catch { return }
-  if (-not (Select-String -Path $acc.Keys -Pattern '"[+-]?fd_|"fm_|"fw_' -Quiet)) { return }
+  # only the local file: editing the Steam Cloud copy (remote\cs2_user_keys.vcfg) made Steam refuse to
+  # sync it. The cloud copy stays clean because FakeMimic runs fd_unfake before the game quits
+  $files = @($acc.Keys) | Where-Object { (Test-Path $_) -and (Select-String -Path $_ -Pattern '"[+-]?fd_|"fm_|"fw_' -Quiet) }
+  if (-not $files) { return }
   $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
   $own = @{}
   if (Test-Path $snapshot) { foreach ($l in Get-Content $snapshot) { if ($l -match '^\s*"([^"]+)"\s+"([^"]*)"\s*$') { $own[$Matches[1].ToUpper()] = $Matches[2] } } }
-  Copy-Item $acc.Keys (Join-Path $Data "backup\keys_$($acc.Id)_with_fake_binds.vcfg") -Force
+  Copy-Item $files[0] (Join-Path $Data "backup\keys_$($acc.Id)_with_fake_binds.vcfg") -Force
   $n = 0
-  $out = foreach ($l in [IO.File]::ReadAllLines($acc.Keys)) {
-    $m = [regex]::Match($l, '^(\s*)"([^"]+)"(\s+)"([^"]*)"\s*$')
-    if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, '(^|[^a-z])[+-]?(fd_|fm_|fw_)')) {
-      $k = $m.Groups[2].Value; $n++
-      $v = if ($own[$k.ToUpper()]) { $own[$k.ToUpper()] } else { "<unbound>" }
-      "$($m.Groups[1].Value)`"$k`"$($m.Groups[3].Value)`"$v`""
-    } else { $l }
+  foreach ($f in $files) {
+    $out = foreach ($l in [IO.File]::ReadAllLines($f)) {
+      $m = [regex]::Match($l, '^(\s*)"([^"]+)"(\s+)"([^"]*)"\s*$')
+      if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, '(^|[^a-z])[+-]?(fd_|fm_|fw_)')) {
+        $k = $m.Groups[2].Value; $n++
+        $v = if ($own[$k.ToUpper()]) { $own[$k.ToUpper()] } else { "<unbound>" }
+        "$($m.Groups[1].Value)`"$k`"$($m.Groups[3].Value)`"$v`""
+      } else { $l }
+    }
+    [IO.File]::WriteAllLines($f, $out, (New-Object Text.UTF8Encoding $false))
   }
-  [IO.File]::WriteAllLines($acc.Keys, $out, (New-Object Text.UTF8Encoding $false))
   Log "your Steam binds had $n fake binds left: put back to your own"
 }
 
@@ -579,6 +584,11 @@ function Plugins-Off($s) {
   }
   $addons = Join-Path $csgo "addons"
   if ((Test-Path $addons) -and -not (Get-ChildItem $addons -Force)) { Remove-Item $addons }
+  # CS2 runs it on every map start in custom mode, and game_type stays 3 after a session without
+  # 'unfake': a normal game later turned fake mode on and saved the fake binds into the Steam profile.
+  # Play puts it back (Install-Cfg)
+  $custom = Join-Path $csgo "cfg\gamemode_custom_server.cfg"
+  if ((Test-Path $custom) -and (Select-String -Path $custom -Pattern 'exec fd_fake' -Quiet)) { Remove-Item $custom -Force }
   if ((Patched $gi) -or (Test-Path (Join-Path $csgo "addons\metamod"))) { throw "cleanup incomplete, check $csgo" }
   Log "plugins OFF, CS2 is clean"
 }

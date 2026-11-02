@@ -550,8 +550,24 @@ public partial class FakeMimic
     {
         if (_ownRespawn)
             foreach (var name in new[] { "mp_respawn_on_death_t", "mp_respawn_on_death_ct" }) ConVar.Find(name)?.SetValue(true);
+        if (!hotReload) Unfake();   // the game is closing in a way that skipped quit
         base.Unload(hotReload);
     }
+
+    // CS2 saves the binds it has when it closes into the Steam profile and its Steam Cloud copy: the fake
+    // binds came back in a normal game (from the cloud copy) after the launcher had fixed the local file.
+    // quit / exit wait for fd_unfake (the player's own binds, written by the launcher), then go on
+    bool _quitting;
+
+    HookResult OnQuit(CCSPlayerController? p, CommandInfo cmd)
+    {
+        if (_quitting) return HookResult.Continue;
+        _quitting = true;
+        Server.ExecuteCommand($"exec fd_unfake; {cmd.GetCommandString}");
+        return HookResult.Stop;
+    }
+
+    static void Unfake() => Server.ExecuteCommand("exec fd_unfake");
 
     void TakeOverRespawn()
     {
