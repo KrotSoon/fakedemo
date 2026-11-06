@@ -319,7 +319,8 @@ public partial class FakeMimic
 
     void DressWeapon(CCSPlayerController p, CBasePlayerWeapon weapon)
     {
-        if (SetOf(p) is not { } set) return;
+        // a mod's weapon from Mod weapons keeps the mod's look (a knife skin would undo the defibrillator)
+        if (_modGiven.Remove(weapon.Index) || SetOf(p) is not { } set) return;
         if (IsKnife(weapon.DesignerName))
         {
             if (set.Knife == 0) return;

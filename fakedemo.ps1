@@ -120,6 +120,7 @@ function Default-Settings {
     Hlae          = $false    # start CS2 through HLAE (always with -insecure): demos play with mirv_streams
     HlaePath      = ""        # HLAE.exe; empty = found in Program Files
     HlaeRecDir    = ""        # where mirv_streams writes (V3 config); empty = Hlae-RecDir's default
+    Mods          = ""        # workshop item ids mounted for the session (not maps: weapons, models), comma separated
     MapKind       = ""        # map to load right away: "" = main menu, "official", "workshop"
     MapId         = ""        # official: map name; workshop: item id
     MapTitle      = ""
@@ -132,8 +133,13 @@ function Default-Settings {
 function Load-Settings {
   $s = Default-Settings
   if (Test-Path $SettingsFile) {
-    $saved = Get-Content $SettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    foreach ($p in $saved.PSObject.Properties) { if ($s.PSObject.Properties[$p.Name]) { $s.($p.Name) = $p.Value } }
+    # a broken file (cut short, edited by hand) must not stop the launcher: it is kept aside, defaults are used
+    $saved = try { Get-Content $SettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch {
+      Copy-Item $SettingsFile (Join-Path $Data "settings.broken.json") -Force
+      Log "WARNING settings.json is broken (kept as settings.broken.json), defaults used: $($_.Exception.Message)"
+      $null
+    }
+    if ($saved) { foreach ($p in $saved.PSObject.Properties) { if ($s.PSObject.Properties[$p.Name]) { $s.($p.Name) = $p.Value } } }
   }
   if (-not $s.Cs2Path -or -not (Test-Path ([IO.Path]::Combine($s.Cs2Path, "game\csgo\gameinfo.gi")))) { $s.Cs2Path = Find-Cs2 }
   $s
@@ -163,8 +169,17 @@ function Find-Cs2 {
   # [IO.Path]::Combine, not Join-Path: a library on a drive that is not there (unplugged disk, old entry)
   # made Join-Path throw "drive D does not exist" and the launcher stopped on its first start
   foreach ($l in $libs) {
-    $c = [IO.Path]::Combine($l, "steamapps\common\Counter-Strike Global Offensive")
-    if (Test-Path ([IO.Path]::Combine($c, "game\csgo\gameinfo.gi"))) { return $c }
+    # the folder name Steam uses is in the app manifest (it is not always the usual one: a friend's was
+    # "Counter-Strike Global Offensive 730")
+    $dirs = @("Counter-Strike Global Offensive")
+    $acf = [IO.Path]::Combine($l, "steamapps\appmanifest_730.acf")
+    try {
+      if (Test-Path $acf) { $m = Select-String -Path $acf -Pattern '"installdir"\s+"([^"]+)"' | Select-Object -First 1; if ($m) { $dirs = @($m.Matches[0].Groups[1].Value) + $dirs } }
+    } catch { }
+    foreach ($d in $dirs) {
+      $c = [IO.Path]::Combine($l, "steamapps\common\$d")
+      if (Test-Path ([IO.Path]::Combine($c, "game\csgo\gameinfo.gi"))) { return $c }
+    }
   }
   ""
 }
@@ -389,8 +404,11 @@ function Build-Unfake($s, [string]$target, [string[]]$touched = @()) {
 # a bound command of fake mode (fd_ fm_ fw_) or of V3 (mirv_ and its own aliases): left by a session
 # or a demo that ended without unfake / reset
 $SessionBindRx = '(^|[^a-z])[+-]?(fd_|fm_|fw_)|(^|[; ])mirv_|^\+v3shift$|^ac(_| |$)|^(recF[1-4]|playbackPause|campathPlayback|hideCampath|localMouseAxis|demoui|speed_(in|de)crease|resetkf|f3s|b3|blur|dof|hud|red|next_dof_state|prev_dof_state)(;|$)'
-function Has-SessionBinds([string]$f) {
-  foreach ($l in [IO.File]::ReadAllLines($f)) { if ($l -match '^\s*"[^"]+"\s+"([^"]*)"\s*$' -and $Matches[1] -match $SessionBindRx) { return $true } }
+# only fake mode's own commands: nobody binds these outside FakeDemo. The V3 / mirv_ ones may be your own
+# (HLAE in normal play): they go back only to what the clean copy has, never to unbound
+$FakeBindRx = '(^|[^a-z])[+-]?(fd_|fm_|fw_)'
+function Has-SessionBinds([string]$f, [string]$rx = $SessionBindRx) {
+  foreach ($l in [IO.File]::ReadAllLines($f)) { if ($l -match '^\s*"[^"]+"\s+"([^"]*)"\s*$' -and $Matches[1] -match $rx) { return $true } }
   $false
 }
 
@@ -402,7 +420,7 @@ function Restore-OwnKeys($s, [switch]$AfterSession) {
   $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
   if ($AfterSession -and (Test-Path $snapshot) -and (Test-Path $acc.Keys) -and
       (Get-FileHash $snapshot).Hash -ne (Get-FileHash $acc.Keys).Hash -and
-      -not (Has-SessionBinds $snapshot)) {
+      -not (Has-SessionBinds $snapshot $FakeBindRx)) {
     Copy-Item $acc.Keys (Join-Path $Data "backup\keys_$($acc.Id)_with_fake_binds.vcfg") -Force
     Copy-Item $snapshot $acc.Keys -Force
     Log "your Steam binds: back to the copy taken before the game started"
@@ -410,24 +428,38 @@ function Restore-OwnKeys($s, [switch]$AfterSession) {
   }
   # only the local file: editing the Steam Cloud copy (remote\cs2_user_keys.vcfg) made Steam refuse to
   # sync it. The cloud copy stays clean because FakeMimic runs fd_unfake before the game quits
-  $files = @($acc.Keys) | Where-Object { (Test-Path $_) -and (Has-SessionBinds $_) }
+  # @( ) around the pipeline: one file left came out as a string, and $files[0] was its first letter
+  # ("C" -> "cannot find path ...\FakeDemo\C", a friend's launcher stopped on Play)
+  $files = @(@($acc.Keys) | Where-Object { (Test-Path $_) -and (Has-SessionBinds $_) })
   if (-not $files) { return }
-  $snapshot = Join-Path $Data "backup\keys_$($acc.Id).vcfg"
+  $hasCopy = Test-Path $snapshot
   $own = @{}
-  if (Test-Path $snapshot) { foreach ($l in Get-Content $snapshot) { if ($l -match '^\s*"([^"]+)"\s+"([^"]*)"\s*$') { $own[$Matches[1].ToUpper()] = $Matches[2] } } }
-  Copy-Item $files[0] (Join-Path $Data "backup\keys_$($acc.Id)_with_fake_binds.vcfg") -Force
+  if ($hasCopy) { foreach ($l in Get-Content $snapshot) { if ($l -match '^\s*"([^"]+)"\s+"([^"]*)"\s*$') { $own[$Matches[1].ToUpper()] = $Matches[2] } } }
   $n = 0
+  $new = @{}
   foreach ($f in $files) {
     $out = foreach ($l in [IO.File]::ReadAllLines($f)) {
       $m = [regex]::Match($l, '^(\s*)"([^"]+)"(\s+)"([^"]*)"\s*$')
       if ($m.Success -and [regex]::IsMatch($m.Groups[4].Value, $SessionBindRx)) {
-        $k = $m.Groups[2].Value; $n++
-        $v = if ($own[$k.ToUpper()]) { $own[$k.ToUpper()] } else { "<unbound>" }
+        $k = $m.Groups[2].Value; $cur = $m.Groups[4].Value
+        $mine = $own[$k.ToUpper()]
+        # fake mode's own: back to yours or unbound. A V3 / mirv_ one: back to the clean copy's, and kept when
+        # there is no clean copy or the copy has the same (then it is yours: a friend's HLAE binds were
+        # unbound on his first start)
+        $v = if ([regex]::IsMatch($cur, $FakeBindRx)) { if ($mine) { $mine } else { "<unbound>" } }
+             elseif ($hasCopy -and $mine -ne $cur -and -not [regex]::IsMatch([string]$mine, $SessionBindRx)) { if ($mine) { $mine } else { "<unbound>" } }
+             else { $cur }
+        if ($v -ne $cur) { $n++ }
         "$($m.Groups[1].Value)`"$k`"$($m.Groups[3].Value)`"$v`""
       } else { $l }
     }
-    [IO.File]::WriteAllLines($f, $out, (New-Object Text.UTF8Encoding $false))
+    $new[$f] = $out
   }
+  if (-not $n) { return }
+  # backup\ is made by Build-Unfake: with fake binds left before any clean copy it was not there yet
+  New-Item -ItemType Directory -Force (Split-Path $snapshot) | Out-Null
+  Copy-Item $files[0] (Join-Path $Data "backup\keys_$($acc.Id)_with_fake_binds.vcfg") -Force
+  foreach ($f in $files) { [IO.File]::WriteAllLines($f, [string[]]$new[$f], (New-Object Text.UTF8Encoding $false)) }
   Log "your Steam binds had $n fake binds left: put back to your own"
 }
 
@@ -668,8 +700,47 @@ function Official-Maps($s) {
   }
 }
 
-# subscribed CS2 workshop items that hold a map: Id, Title, Map (the name the console knows), Preview file
-function Workshop-Maps($s) {
+# every file of a VPK directory as "path/name.ext" with its size (only the tree is read, fast also for 1 GB)
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+public static class VpkTree {
+  static string Str(BinaryReader r) {
+    var b = new List<byte>();
+    for (byte c; (c = r.ReadByte()) != 0;) b.Add(c);
+    return Encoding.UTF8.GetString(b.ToArray());
+  }
+  public static Dictionary<string, long> List(string vpk) {
+    var all = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+    using (var fs = File.OpenRead(vpk))
+    using (var r = new BinaryReader(fs)) {
+      if (r.ReadUInt32() != 0x55AA1234) return all;
+      var ver = r.ReadUInt32(); r.ReadUInt32();
+      if (ver == 2) r.ReadBytes(16);
+      for (string ext; (ext = Str(r)) != "";)
+        for (string path; (path = Str(r)) != "";)
+          for (string name; (name = Str(r)) != "";) {
+            r.ReadUInt32(); var pre = r.ReadUInt16(); r.ReadUInt16(); r.ReadUInt32(); var len = r.ReadUInt32(); r.ReadUInt16();
+            r.ReadBytes(pre);
+            all[(path == " " ? "" : path + "/") + name + "." + ext] = (long)pre + len;
+          }
+    }
+    return all;
+  }
+}
+'@
+
+# What a workshop item is, from the files in its VPK: a map (maps/<name>.vpk) or a mod - weapons, models, sounds
+# for every map (NewGuns: weapons.vdata, 334 models and a 33 KB test map). A map with its own models in the map
+# stays a map: a mod is content outside maps/ next to no map or only a tiny one. Kept per VPK date.
+$script:WsCache = @{}
+# top folder of a mod's files -> what the list says it changes
+$ModParts = [ordered]@{ "weapons" = "оружие"; "scripts" = "оружие"; "agents" = "агенты"; "models" = "модели"
+  "sounds" = "звуки"; "soundevents" = "звуки"; "particles" = "эффекты"; "panorama" = "интерфейс" }
+
+function Workshop-Items($s) {
   if (-not $s.Cs2Path) { return }
   $root = [IO.Path]::GetFullPath((Join-Path $s.Cs2Path "..\..\workshop\content\730"))
   if (-not (Test-Path $root)) { return }
@@ -677,15 +748,39 @@ function Workshop-Maps($s) {
     # CS:GO leftovers are .bin files without a vpk
     $f = @(Get-ChildItem $d.FullName -Filter "*_dir.vpk") + @(Get-ChildItem $d.FullName -Filter "$($d.Name).vpk") | Select-Object -First 1
     if (-not $f) { continue }
-    $maps = try { Vpk-Maps $f.FullName } catch { @{} }
-    if (-not $maps.Count) { continue }   # asset packs
-    $map = ($maps.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1).Key
-    $title = $map
-    $pd = Join-Path $d.FullName "publish_data.txt"
-    if ((Test-Path $pd) -and ((Get-Content $pd -Raw -Encoding UTF8) -match '"title"\s+"([^"]+)"')) { $title = $Matches[1] }
-    [pscustomobject]@{ Kind = "workshop"; Id = $d.Name; Title = $title; Map = $map; Preview = Join-Path $Data "ws\$($d.Name).img" }
+    $key = "$($f.FullName)|$($f.LastWriteTimeUtc.Ticks)"
+    if (-not $script:WsCache.ContainsKey($key)) { $script:WsCache[$key] = Workshop-Item $d $f }
+    if ($script:WsCache[$key]) { $script:WsCache[$key] }
   }
 }
+
+function Workshop-Item($d, $f) {
+  $files = try { [VpkTree]::List($f.FullName) } catch { return $null }
+  $maps = @{}
+  foreach ($k in $files.Keys) {
+    if ($k -match '^maps/([^/]+)\.vpk$' -and $Matches[1] -notmatch 'skybox|3dsky') { $maps[$Matches[1]] = $files[$k] }
+  }
+  $tops = @{}; foreach ($k in $files.Keys) { $tops[($k -split '/')[0]] = 1 }
+  $parts = @($ModParts.Keys | Where-Object { $tops.ContainsKey($_) } | ForEach-Object { $ModParts[$_] } | Select-Object -Unique)
+  $biggest = ($maps.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 1)
+  $isMod = $parts.Count -and (-not $biggest -or $biggest.Value -lt 1MB)
+  if (-not $isMod -and -not $maps.Count) { return $null }   # asset packs of nothing we know
+  $title = if ($biggest) { $biggest.Key } else { $d.Name }
+  $pd = Join-Path $d.FullName "publish_data.txt"
+  if ((Test-Path $pd) -and ((Get-Content $pd -Raw -Encoding UTF8) -match '"title"\s+"([^"]+)"')) { $title = $Matches[1] }
+  [pscustomobject]@{
+    Kind = $(if ($isMod) { "mod" } else { "workshop" }); Id = $d.Name; Title = $title
+    # (a multi-part VPK: all its parts)
+    Map = $(if ($biggest) { $biggest.Key } else { "" }); Size = (Get-ChildItem $d.FullName -Filter *.vpk | Measure-Object Length -Sum).Sum; Parts = $parts
+    Preview = Join-Path $Data "ws\$($d.Name).img"
+  }
+}
+
+# subscribed CS2 workshop items that hold a map: Id, Title, Map (the name the console knows), Preview file
+function Workshop-Maps($s) { Workshop-Items $s | Where-Object Kind -eq "workshop" }
+
+# subscribed workshop mods (not maps): Id, Title, Size, Parts (what they change), Preview file
+function Workshop-Mods($s) { Workshop-Items $s | Where-Object Kind -eq "mod" }
 
 # fd_ws.cfg: ws = numbered list, ws1 ws2 ... = exec fd + that map (fd.cfg execs this file)
 function Write-WsCfg($s, [string]$cfg) {
@@ -726,7 +821,7 @@ function Fetch-Previews($s) {
     }
   }
 
-  $need = @(Workshop-Maps $s | Where-Object { -not (Test-Path $_.Preview) })
+  $need = @(Workshop-Items $s | Where-Object { -not (Test-Path $_.Preview) })
   if (-not $need) { return }
   New-Item -ItemType Directory -Force (Join-Path $Data "ws") | Out-Null
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -809,6 +904,11 @@ function Plugins-On($s) {
     # the skins menu: without the list it only says so, the game still starts
     try { $skins = Build-SkinsList $s; Put "$css\plugins\FakeMimic\skins.txt" { param($p) Copy-Item $skins $p } }
     catch { Log "WARNING skins list not made: $($_.Exception.Message)" }
+    # the weapons of the mods that are on, for H > Modules > Mod weapons (a list per known mod in game\mods)
+    foreach ($id in Mod-Ids $s) {
+      $list = Join-Path $Here "game\mods\$id.txt"
+      if (Test-Path $list) { Put "$css\plugins\FakeMimic\modweapons_$id.txt" { param($p) Copy-Item $list $p } }
+    }
     Put "$css\shared\FakeMimicApi\FakeMimicApi.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeMimicApi\FakeMimicApi.dll") $p }
     if ($s.FakeDirector) { Put "$css\plugins\FakeDirector\FakeDirector.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeDirector\FakeDirector.dll") $p } }
     if ($s.FakeWallhack) { Put "$css\plugins\FakeWallhack\FakeWallhack.dll" { param($p) Copy-Item (Join-Path $Here "plugins\FakeWallhack\FakeWallhack.dll") $p } }
@@ -839,6 +939,30 @@ function Plugins-On($s) {
   Log "plugins ON ($($script:put.Count) files)"
 }
 
+# ---------------- workshop mods ----------------
+# A workshop item that is not a map (weapons, models, sounds: NewGuns) is loaded the game's own way:
+# "map_workshop <mod id> <map>" mounts the mod as an addon above the game's pak01 (its weapons.vdata and models
+# win) and loads the map from the game. Load-Workshop types it in once the console answers.
+# Mounting the VPK as a search path in gameinfo.gi did not work: a loose folder comes after every VPK, the VPK
+# itself was refused. Unmount-Mods still takes out what that way left in gameinfo.gi and csgod_addons.
+$ModsDir = "fd_addons"
+
+function Mod-Ids($s) { @(([string]$s.Mods) -split '[,;\s]+' | Where-Object { $_ -match '^\d+$' } | Select-Object -Unique) }
+
+function Unmount-Mods($s, [string]$gi) {
+  $text = Get-Content $gi -Raw
+  $clean = $text -replace "[ \t]*Game[ \t]+csgo/$ModsDir/[^\r\n]*\r?\n", ""
+  if ($clean -ne $text) { [IO.File]::WriteAllText($gi, $clean) }
+  # the junctions only (Directory.Delete without recursing removes the link, not the unpacked mod behind it;
+  # Remove-Item -Recurse would go into it), then the emptied folder
+  $dir = Join-Path (Csgo $s) $ModsDir
+  if (-not (Test-Path $dir)) { return }
+  foreach ($d in Get-ChildItem $dir -Force) {
+    if ($d.Attributes -band [IO.FileAttributes]::ReparsePoint) { [IO.Directory]::Delete($d.FullName) }
+  }
+  if (-not (Get-ChildItem $dir -Force)) { Remove-Item $dir -Force }
+}
+
 function Plugins-Off($s) {
   Need-Closed
   $csgo = Csgo $s
@@ -847,6 +971,7 @@ function Plugins-Off($s) {
   $text = Get-Content $gi -Raw
   $clean = $text -replace "[ \t]*Game[ \t]+csgo/addons/metamod[^\r\n]*\r?\n", ""
   if ($clean -ne $text) { [IO.File]::WriteAllText($gi, $clean) }
+  Unmount-Mods $s $gi
 
   $files = Load-Manifest
   if ($files.Count) {
@@ -882,7 +1007,7 @@ function Plugins-Off($s) {
   # Play puts it back (Install-Cfg)
   $custom = Join-Path $csgo "cfg\gamemode_custom_server.cfg"
   if ((Test-Path $custom) -and (Select-String -Path $custom -Pattern 'exec fd_fake' -Quiet)) { Remove-Item $custom -Force }
-  if ((Patched $gi) -or (Test-Path (Join-Path $csgo "addons\metamod"))) { throw "cleanup incomplete, check $csgo" }
+  if ((Patched $gi) -or (Test-Path (Join-Path $csgo "addons\metamod")) -or (Get-Content $gi -Raw) -match "csgo/$ModsDir/") { throw "cleanup incomplete, check $csgo" }
   Log "plugins OFF, CS2 is clean"
 }
 
@@ -903,7 +1028,7 @@ function Import-OldData([string]$dir, [string]$plugin) {
 # for a workshop map and with plugins (Takes > Watch types playdemo into it); port 0 = no netcon
 function Netcon-Of($s) {
   if ([int]$s.NetconPort -gt 0) { return @{ Port = [int]$s.NetconPort; Pass = $s.NetconPassword } }
-  if (($s.MapKind -eq "workshop" -and $s.MapId) -or $s.Plugins) { return @{ Port = $SessionPort; Pass = $SessionPass } }
+  if (($s.MapKind -eq "workshop" -and $s.MapId) -or @(Mod-Ids $s).Count -or $s.Plugins) { return @{ Port = $SessionPort; Pass = $SessionPass } }
   @{ Port = 0; Pass = "" }
 }
 
@@ -921,8 +1046,8 @@ function Launch-Args($s) {
   if ($s.ExecFd -or $s.MapId) { $a += "+exec", "fd" }
   # fd_v3.js: V3 keys in a demo, fake keys after it
   if ($s.Hlae) { $a += "+exec", "fd_hlae" }
-  # a workshop map is not mounted yet when the command line runs: Load-WorkshopMap types it in later
-  if ($s.MapId -and $s.MapKind -ne "workshop") { $a += "+map", $s.MapId }
+  # a workshop map or a mod is not mounted yet when the command line runs: Load-WorkshopMap types it in later
+  if ($s.MapId -and $s.MapKind -ne "workshop" -and -not @(Mod-Ids $s).Count) { $a += "+map", $s.MapId }
   $a
 }
 
@@ -978,14 +1103,26 @@ function Load-WorkshopMap($s) {
     if (-not $ready) { Log "WARNING game console never answered: load the map in game with ws"; return }
     # 2. the main menu finished loading: console quiet for a while
     [void](Heard (Netcon-Read $st 4000 60000))
-    # 3. the map; once more if the game said nothing about it
-    $map = (Workshop-Maps $s | Where-Object Id -eq $s.MapId | Select-Object -First 1).Map
-    if (-not $map) { Log "WARNING workshop item $($s.MapId) not found on disk: is it still subscribed?"; return }
+    # 3. the map; once more if the game said nothing about it. A workshop map: its item and its map name;
+    # a mod: the mod's item and the map chosen in the launcher (from the game)
+    # the addons go in one list: "map_workshop <map item>,<mod>,<mod> <map>" mounts them all (checked)
+    $mods = @(Mod-Ids $s)
+    if ($s.MapKind -eq "workshop") {
+      $map = (Workshop-Maps $s | Where-Object Id -eq $s.MapId | Select-Object -First 1).Map
+      if (-not $map) { Log "WARNING workshop item $($s.MapId) not found on disk: is it still subscribed?"; return }
+      $item = (@($s.MapId) + $mods) -join ','
+    } elseif ($s.MapId) { $item = $mods -join ','; $map = $s.MapId }
+    else {
+      # no map chosen: how to go in with the mods
+      Netcon-Send $st "echo [FakeDemo] mods: map_workshop $($mods -join ',') de_mirage (any map)"
+      Log "mods $($mods -join ','): no map chosen, in game: map_workshop $($mods -join ',') <map>"
+      return
+    }
     Netcon-Send $st "find workshop"   # into netcon.log: which workshop commands this game build has
     [void](Heard (Netcon-Read $st 1500 5000))
     for ($try = 1; $try -le 2; $try++) {
-      Log "loading workshop map $($s.MapTitle): map_workshop $($s.MapId) $map$(if ($try -gt 1) { ', again' })"
-      Netcon-Send $st "map_workshop $($s.MapId) $map"
+      Log "loading $map$(if ($mods.Count) { " with mods $($mods -join ',')" }): map_workshop $item $map$(if ($try -gt 1) { ', again' })"
+      Netcon-Send $st "map_workshop $item $map"
       $reply = Heard (Netcon-Read $st 5000 30000)
       $lines = @($reply -split "`r?`n" | Where-Object { $_ -match 'workshop|map|fail|error|unknown|loading|addon' } | Select-Object -First 6)
       foreach ($l in $lines) { Log "  game: $($l.Trim())" }
@@ -1043,9 +1180,19 @@ function Play($s) {
   Need-Closed
   Restore-OwnKeys $s   # before Build-Unfake reads them: a clean profile refreshes the clean copy
   Install-Cfg $s
-  if ($s.Plugins) { Plugins-On $s } elseif ((Load-Manifest).Count) { Plugins-Off $s }
+  if ($s.Plugins) {
+    # stopped half way (no CS2 profile, a download failed): what went in comes out, the game is not started
+    # Only when something of ours went in (the manifest): without one Plugins-Off removes the old 0.5 install
+    # paths, and that would take a Metamod that is not ours (the reason Plugins-On refused)
+    try { Plugins-On $s } catch {
+      $e = $_
+      if ((Load-Manifest).Count) { try { Plugins-Off $s } catch { Log "WARNING plugins not taken out: $($_.Exception.Message)" } }
+      throw $e
+    }
+  } elseif ((Load-Manifest).Count) { Plugins-Off $s }
   Start-Cs2 $s (Launch-Args $s)
-  $workshop = $s.MapKind -eq "workshop" -and $s.MapId
+  # a workshop map or a mod: typed in over netcon once the game is up
+  $workshop = ($s.MapKind -eq "workshop" -and $s.MapId) -or @(Mod-Ids $s).Count
   if (-not $s.Plugins) {
     if ($workshop) { Wait-Cs2Start; Load-WorkshopMap $s }
     Log "started without plugins"; return

@@ -1,0 +1,27 @@
+# NewGuns (workshop 3791145801): the weapons it adds, for the H menu (FakeMimic > Mod weapons).
+# category|vdata name|name in the menu|the game's class it is made on (given, then ChangeSubclass) (from the mod's own shop)
+Пистолеты|dual_glocks|Двойные глоки|weapon_elite
+Пистолеты|ng_magnum|Магнум|weapon_deagle
+Пистолеты|ng_plasma_pistol|Плазменный пистолет|weapon_p250
+Пистолеты|ng_nailgun|Гвоздомёт|weapon_tec9
+Пистолеты|ng_sawed_off|Обрез|weapon_sawedoff
+Винтовки|weapon_annabelle|Охотничье ружьё|weapon_ssg08
+Винтовки|weapon_crossbow|Арбалет|weapon_p90
+Винтовки|ng_ar2|Плазма-пушка AR2|weapon_galilar
+Винтовки|ng_explosive_rifle|Взрывная винтовка|weapon_aug
+Винтовки|ng_tesla|Тесла-пушка|weapon_famas
+Тяжёлое|grenade_launcher|Гранатомёт|weapon_bizon
+Тяжёлое|weapon_mortar|Миномёт|weapon_c4
+Тяжёлое|weapon_mp9|Огнемёт|weapon_mp9
+Тяжёлое|minigun|Миниган|weapon_negev
+Тяжёлое|weapon_rpg|РПГ|weapon_m249
+Гранаты|weapon_flashbang_emp|ЭМИ-граната|weapon_flashbang
+Гранаты|weapon_smokegrenade_gas|Слезоточивый газ|weapon_smokegrenade
+Гранаты|weapon_mine|Мина|weapon_hegrenade
+Гранаты|weapon_bombcar|Бомба на машинке|weapon_incgrenade
+Гранаты|weapon_drone|Дрон|weapon_decoy
+Снаряжение|weapon_medkit|Медицинский набор|weapon_healthshot
+Снаряжение|weapon_shield|Щит|weapon_c4
+Снаряжение|weapon_defib|Дефибриллятор|weapon_knife
+sounds|soundevents/newguns_weapons.vsndevts
+sounds|soundevents/soundevents_addon.vsndevts

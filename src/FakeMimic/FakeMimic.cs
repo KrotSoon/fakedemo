@@ -228,6 +228,9 @@ public partial class FakeMimic : BasePlugin
         // own configs: a row like a module's (the main screen is full, they share "Modules ›")
         _addonItems.Insert(0, () => new ApiMenuItem("Configs ›", ConfigsMenu) { Value = OwnCfgs().Count.ToString() });
         _addonItems.Insert(1, () => new ApiMenuItem("Skins ›", pl => SkinsMenu(pl, null)) { Value = _you.Empty ? "" : "on" });
+        LoadModWeapons();
+        if (_modWeapons.Count > 0)
+            _addonItems.Insert(2, () => new ApiMenuItem("Mod weapons ›", ModWeaponsMenu) { Value = _modWeapons.Count.ToString() });
     }
 
     public override void OnAllPluginsLoaded(bool hotReload)

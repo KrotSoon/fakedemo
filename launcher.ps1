@@ -392,6 +392,20 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           </DockPanel>
         </Border>
 
+        <Border x:Name="ModsCard" Style="{StaticResource ClickCard}" Padding="10" ToolTip="Моды из мастерской: оружие, модели, звуки на любой карте">
+          <DockPanel>
+            <Button x:Name="BtnModsClear" DockPanel.Dock="Right" Style="{StaticResource Tool}" Content="&#x2715;" Width="30" Height="30"
+                    VerticalAlignment="Center" ToolTip="Без модов"/>
+            <Border x:Name="ModsThumb" Width="80" Height="45" CornerRadius="8" Background="#14FFFFFF" Margin="0,0,12,0">
+              <TextBlock x:Name="ModsGlyph" Text="&#x2726;" FontSize="18" Foreground="#80FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock x:Name="ModsTitle" Style="{StaticResource Label}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock x:Name="ModsHint" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
         <Border x:Name="TakesCard" Style="{StaticResource ClickCard}" Padding="12,10" ToolTip="Все демки: смотреть, оценивать, переименовывать, удалять">
           <DockPanel>
             <TextBlock DockPanel.Dock="Right" Text="&#x203A;" FontSize="22" Foreground="#80FFFFFF" VerticalAlignment="Center"/>
@@ -441,6 +455,25 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
         <DockPanel Margin="-6,8,-6,0">
           <Button x:Name="BtnWorkshop" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Открыть мастерскую"/>
           <Button x:Name="BtnPickBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
+        </DockPanel>
+      </StackPanel>
+
+      <!-- ===== mods: subscribed workshop items that are not maps, each with a switch ===== -->
+      <StackPanel x:Name="Mods" Visibility="Collapsed">
+        <Grid>
+          <TextBox x:Name="TbModSearch" Style="{StaticResource Field}"/>
+          <TextBlock x:Name="ModSearchHint" Text="&#x2315;  Поиск по модам" IsHitTestVisible="False" Foreground="#60FFFFFF"
+                     FontSize="14" Margin="12,0,0,0" VerticalAlignment="Center"/>
+        </Grid>
+        <ScrollViewer x:Name="ModScroll" Margin="0,10,-8,0" MaxHeight="430" VerticalScrollBarVisibility="Auto" Focusable="False">
+          <StackPanel x:Name="ModList" Margin="0,0,8,0"/>
+        </ScrollViewer>
+        <TextBlock x:Name="ModEmpty" Style="{StaticResource Hint}" Margin="2,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+        <TextBlock Style="{StaticResource Hint}" Margin="2,10,0,0" TextWrapping="Wrap"
+                   Text="включённые моды загружаются вместе с выбранной картой: официальной или из мастерской"/>
+        <DockPanel Margin="-6,8,-6,0">
+          <Button x:Name="BtnModWorkshop" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Найти моды в мастерской"/>
+          <Button x:Name="BtnModsBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
         </DockPanel>
       </StackPanel>
 
@@ -705,11 +738,14 @@ function Update-Summary {
   (El "Modules").Opacity = $(if ($s.Plugins) { 1 } else { 0.45 })
   (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
   $where = if ($s.MapId) { $s.MapTitle } else { "главное меню" }
-  (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })$(if ($s.Hlae) { ' · через HLAE' })"
+  $mods = @(Chosen-Mods)
+  (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })$(if ($s.Hlae) { ' · через HLAE' })" +
+    $(if ($mods.Count -eq 1) { " · мод $($mods[0].Title)" } elseif ($mods.Count) { " · модов: $($mods.Count)" } else { "" })
   Update-MapCard
+  Update-ModsCard
 }
 
-$Screens = [ordered]@{ "main" = @("Main", "Fake demo"); "settings" = @("Settings", "Настройки"); "picker" = @("Picker", "Карта"); "takes" = @("Takes", "Демки"); "binds" = @("Keys", "Клавиши") }   # not "keys": that name would hide $Screens.Keys
+$Screens = [ordered]@{ "main" = @("Main", "Fake demo"); "settings" = @("Settings", "Настройки"); "picker" = @("Picker", "Карта"); "mods" = @("Mods", "Моды"); "takes" = @("Takes", "Демки"); "binds" = @("Keys", "Клавиши") }   # not "keys": that name would hide $Screens.Keys
 
 function Show-Screen([string]$name) {
   foreach ($k in $Screens.Keys) { (El $Screens[$k][0]).Visibility = $(if ($k -eq $name) { "Visible" } else { "Collapsed" }) }
@@ -717,6 +753,7 @@ function Show-Screen([string]$name) {
   Animate-In (El $Screens[$name][0])
   if ($name -eq "picker") { Animate-In (Pick-List) 25 8 }
   if ($name -eq "takes") { Animate-In (El "TkList") 25 8 }
+  if ($name -eq "mods") { Animate-In (El "ModList") 25 8 }
   if ($name -eq "main") { Update-TakesCard }
   if ($name -eq "settings") { Update-KeysCard }
   if ($name -eq "binds") { Animate-In (El "KyList") 25 8 }
@@ -863,8 +900,105 @@ function Filter-Picker {
 # previews come from a background process; the window picks them up as files appear
 function Start-Previews {
   if ($script:prevProc -and -not $script:prevProc.HasExited) { return }
-  $missing = @(@(Official-Maps $script:s) + @(Workshop-Maps $script:s) | Where-Object { -not (Test-Path $_.Preview) })
+  $missing = @(@(Official-Maps $script:s) + @(Workshop-Items $script:s) | Where-Object { -not (Test-Path $_.Preview) })
   if ($missing) { $script:prevProc = Run-Hidden "previews"; $script:prevTimer.Start() }
+}
+
+# ---------------- mods ----------------
+# Subscribed workshop items that are not maps (fakedemo.ps1 Workshop-Mods). The chosen ones are $s.Mods (ids);
+# Play loads the map with all of them: map_workshop <map item>,<mod>,<mod> <map>.
+
+function Mod-List { if ($null -eq $script:modList) { $script:modList = @(Workshop-Mods $script:s | Sort-Object Title) }; $script:modList }
+
+function Chosen-Mods { $ids = @(Mod-Ids $script:s); if (-not $ids.Count) { return }; Mod-List | Where-Object { $ids -contains $_.Id } }
+
+function Size-Text([long]$b) { if ($b -ge 1GB) { "{0:0.0} ГБ" -f ($b / 1GB) } else { "{0:0} МБ" -f [math]::Max(1, $b / 1MB) } }
+
+function Update-ModsCard {
+  $mods = @(Chosen-Mods)
+  (El "ModsTitle").Text = $(if (-not $mods.Count) { "Моды" } elseif ($mods.Count -eq 1) { $mods[0].Title } else { "Модов: $($mods.Count)" })
+  (El "ModsHint").Text = if (-not $mods.Count) { "без модов · оружие, модели, звуки из мастерской" }
+                         elseif (-not $script:s.MapId) { "выбери карту: моды загружаются вместе с ней" }
+                         elseif ($mods.Count -eq 1) { "$($mods[0].Parts -join ', ') · $(Size-Text $mods[0].Size)" }
+                         else { ($mods | ForEach-Object Title) -join ', ' }
+  (El "BtnModsClear").Visibility = $(if ($mods.Count) { "Visible" } else { "Collapsed" })
+  $brush = if ($mods.Count) { Image-Brush $mods[0].Preview } else { $null }
+  (El "ModsThumb").Background = $(if ($brush) { $brush } else { "#14FFFFFF" })
+  (El "ModsGlyph").Visibility = $(if ($brush) { "Collapsed" } else { "Visible" })
+}
+
+function Set-ModChosen([string]$id, [bool]$on) {
+  $ids = New-Object Collections.Generic.List[string]
+  foreach ($x in Mod-Ids $script:s) { $ids.Add($x) }
+  if ($on -and -not $ids.Contains($id)) { $ids.Add($id) } elseif (-not $on) { [void]$ids.Remove($id) }
+  $script:s.Mods = $ids -join ","
+  Save; Update-Summary
+}
+
+# one row: preview, title, what it changes and its size, a switch (the whole row toggles it)
+function New-ModRow($m) {
+  $card = New-Object Windows.Controls.Border
+  $card.Style = $win.Resources["ClickCard"]; $card.Padding = "10"; $card.Margin = "0,0,0,8"
+  $dock = New-Object Windows.Controls.DockPanel
+  $sw = New-Object Windows.Controls.CheckBox
+  $sw.Style = $win.Resources["Switch"]; $sw.VerticalAlignment = "Center"
+  [Windows.Controls.DockPanel]::SetDock($sw, "Right")
+  $sw.IsChecked = (Mod-Ids $script:s) -contains $m.Id
+  $thumb = New-Object Windows.Controls.Border
+  $thumb.Width = 80; $thumb.Height = 45; $thumb.CornerRadius = 8; $thumb.Background = "#14FFFFFF"; $thumb.Margin = "0,0,12,0"
+  $glyph = New-Object Windows.Controls.TextBlock
+  $glyph.Text = [string][char]0x2726; $glyph.FontSize = 18; $glyph.Foreground = "#60FFFFFF"
+  $glyph.HorizontalAlignment = "Center"; $glyph.VerticalAlignment = "Center"
+  $thumb.Child = $glyph
+  $text = New-Object Windows.Controls.StackPanel
+  $text.VerticalAlignment = "Center"
+  $t = New-Object Windows.Controls.TextBlock
+  $t.Text = $m.Title; $t.Style = $win.Resources["Label"]; $t.TextTrimming = "CharacterEllipsis"
+  $h = New-Object Windows.Controls.TextBlock
+  $h.Text = "$(if ($m.Parts) { $m.Parts -join ', ' } else { 'ресурсы' }) · $(Size-Text $m.Size)"
+  $h.Style = $win.Resources["Hint"]; $h.TextTrimming = "CharacterEllipsis"
+  [void]$text.Children.Add($t); [void]$text.Children.Add($h)
+  [void]$dock.Children.Add($sw); [void]$dock.Children.Add($thumb); [void]$dock.Children.Add($text)
+  $card.Child = $dock
+  $card.ToolTip = "ID $($m.Id) · правый клик: открыть в мастерской"
+  $row = [pscustomobject]@{ Map = $m; Thumb = $thumb; Glyph = $glyph; HasImage = $false; Switch = $sw
+                            Search = "$($m.Title) $($m.Id) $($m.Parts -join ' ')".ToLower() }
+  $script:modRows[$card] = $row
+  $sw.Add_Click({ param($sender) $r = @($script:modRows.Values | Where-Object { $_.Switch -eq $sender })[0]; Set-ModChosen $r.Map.Id ([bool]$sender.IsChecked) })
+  $card.Add_MouseLeftButtonUp({ param($sender, $e)
+    if ($e.OriginalSource -is [Windows.Controls.Primitives.ToggleButton]) { return }
+    $r = $script:modRows[$sender]; $r.Switch.IsChecked = -not $r.Switch.IsChecked; Set-ModChosen $r.Map.Id ([bool]$r.Switch.IsChecked) })
+  $card.Add_MouseRightButtonUp({ param($sender) Start-Process "steam://openurl/https://steamcommunity.com/sharedfiles/filedetails/?id=$($script:modRows[$sender].Map.Id)" })
+  Set-TileImage $row $false
+  $card
+}
+
+function Open-Mods {
+  $script:modList = $null   # read again: something may have been subscribed since
+  $script:modRows = @{}
+  $list = El "ModList"
+  $list.Children.Clear()
+  foreach ($m in Mod-List) { [void]$list.Children.Add((New-ModRow $m)) }
+  (El "TbModSearch").Text = ""
+  Filter-Mods
+  Show-Screen "mods"
+  Start-Previews
+  (El "TbModSearch").Focus() | Out-Null
+}
+
+function Filter-Mods {
+  $q = (El "TbModSearch").Text.Trim().ToLower()
+  (El "ModSearchHint").Visibility = $(if ($q) { "Collapsed" } else { "Visible" })
+  $shown = 0
+  foreach ($c in (El "ModList").Children) {
+    $ok = -not $q -or $script:modRows[$c].Search.Contains($q)
+    $c.Visibility = $(if ($ok) { "Visible" } else { "Collapsed" })
+    if ($ok) { $shown++ }
+  }
+  $e = El "ModEmpty"
+  $e.Text = if (-not @(Mod-List).Count) { "Нет скачанных модов. Подпишись на мод в мастерской Steam: после загрузки он появится здесь" }
+            elseif (-not $shown) { "Ничего не найдено по «$q»" } else { "" }
+  $e.Visibility = $(if ($e.Text) { "Visible" } else { "Collapsed" })
 }
 
 # ---------------- takes ----------------
@@ -1348,8 +1482,11 @@ function Refresh {
   }
   if ($script:proc -and $script:proc.HasExited -and -not $script:procSeen) {
     $script:procSeen = $true
-    $last = if (Test-Path $LogFile) { Get-Content $LogFile -Tail 1 -Encoding UTF8 } else { "" }
-    if ($script:proc.ExitCode -ne 0) { Show-Error $last } else { Show-Info $last }
+    $log = @(if (Test-Path $LogFile) { Get-Content $LogFile -Encoding UTF8 })
+    $last = if ($log.Count) { $log[-1] } else { "" }
+    # an error message may run over several lines: the ERROR line is the one to show
+    if ($script:proc.ExitCode -ne 0) { $err = @($log | Where-Object { $_ -match '^\S+ ERROR: ' }); Show-Error $(if ($err.Count) { $err[-1] } else { $last }) }
+    else { Show-Info $last }
   } elseif ($playing -and (Test-Path $LogFile)) {
     $script:procSeen = $false
     Show-Info (Get-Content $LogFile -Tail 1 -Encoding UTF8)
@@ -1372,6 +1509,11 @@ function Refresh {
 (El "BtnGear").Add_Click({ Show-Screen $(if ((Screen) -eq "settings") { "main" } else { "settings" }) })
 (El "BtnPickBack").Add_Click({ Show-Screen "main" })
 (El "BtnWorkshop").Add_Click({ Start-Process "steam://openurl/https://steamcommunity.com/app/730/workshop/" })
+(El "BtnModWorkshop").Add_Click({ Start-Process "steam://openurl/https://steamcommunity.com/app/730/workshop/" })
+(El "ModsCard").Add_MouseLeftButtonDown({ param($sender, $e) $e.Handled = $true; try { Open-Mods } catch { Show-Error $_.Exception.Message } })
+(El "BtnModsClear").Add_Click({ param($sender, $e) $e.Handled = $true; $script:s.Mods = ""; Save; Update-Summary })
+(El "BtnModsBack").Add_Click({ Show-Screen "main" })
+(El "TbModSearch").Add_TextChanged({ Filter-Mods })
 (El "TbSearch").Add_TextChanged({ Filter-Picker })
 (El "TabOfficial").Add_Checked({ if (-not $script:loading) { Show-Tab; Animate-In (Pick-List) 25 8 } })
 (El "TabWorkshop").Add_Checked({ if (-not $script:loading) { Show-Tab; Animate-In (Pick-List) 25 8 } })
@@ -1526,6 +1668,10 @@ $win.Add_PreviewKeyDown({
     if ((El "TkSearch").Text) { (El "TkSearch").Text = "" } else { Show-Screen "main" }
     $e.Handled = $true; return
   }
+  if ($e.OriginalSource -eq (El "TbModSearch") -and $e.Key -eq "Escape") {
+    if ((El "TbModSearch").Text) { (El "TbModSearch").Text = "" } else { Show-Screen "main" }
+    $e.Handled = $true; return
+  }
   if ($e.OriginalSource -is [Windows.Controls.TextBox]) {
     if ($e.Key -eq "Enter" -or $e.Key -eq "Escape") { [Windows.Input.Keyboard]::ClearFocus(); (El "Panel").Focus() | Out-Null; $e.Handled = $true }
     return
@@ -1559,7 +1705,8 @@ $script:prevTimer.Interval = [TimeSpan]::FromMilliseconds(200)
 $script:prevTimer.Add_Tick({
   try {
     if ((El "Picker").Visibility -eq "Visible") { foreach ($t in @($script:tiles.Values)) { Set-TileImage $t } }
-    if (-not $script:prevProc -or $script:prevProc.HasExited) { $script:prevTimer.Stop(); $script:prevProc = $null; Update-MapCard }
+    if ((El "Mods").Visibility -eq "Visible") { foreach ($r in @($script:modRows.Values)) { Set-TileImage $r } }
+    if (-not $script:prevProc -or $script:prevProc.HasExited) { $script:prevTimer.Stop(); $script:prevProc = $null; Update-MapCard; Update-ModsCard }
   } catch { }
 })
 
