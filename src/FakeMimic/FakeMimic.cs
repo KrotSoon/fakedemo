@@ -331,11 +331,13 @@ public partial class FakeMimic : BasePlugin
     // without item_purchase, picked up), so it is given BuyLeadTicks early like a purchase
     static List<(int Tick, string Item)> WithMissingGuns(Recording rec)
     {
-        var have = rec.Weapons.ToHashSet();
+        // by class: a mod weapon ("weapon_negev:minigun") holds its base class's definition in the ticks, and the
+        // plain gun must not be bought over it
+        var have = rec.Weapons.Select(w => SplitItem(w).Base).ToHashSet();
         var buys = rec.Buys.ToList();
         for (int i = 0, next = 0, last = -1; i < rec.Ticks.Length; i++)
         {
-            for (; next < rec.Buys.Count && rec.Buys[next].Tick <= i; next++) have.Add(rec.Buys[next].Item);
+            for (; next < rec.Buys.Count && rec.Buys[next].Tick <= i; next++) have.Add(SplitItem(rec.Buys[next].Item).Base);
             var def = rec.Ticks[i].WeaponDefIndex;
             if (def == last) continue;
             last = def;
@@ -414,13 +416,23 @@ public partial class FakeMimic : BasePlugin
     void Buy(CCSPlayerController bot, string item)
     {
         if (bot.PlayerPawn.Value?.WeaponServices is not { } ws) return;
-        bool Same(string held) => Primary(item) ? Primary(held) : Pistols.Contains(item) && Pistols.Contains(held);
+        var (bas, sub) = SplitItem(item);
+        // a mod weapon also replaces one of its own class (a grenade, the knife: the game keeps one of a class)
+        bool Same(string held) => Primary(bas) ? Primary(held) : Pistols.Contains(bas) && Pistols.Contains(held)
+            || sub != null && (held == bas || bas == "weapon_knife" && IsKnife(held));
         // removed at once: RemoveItemByDesignerName took 7 ticks, and meanwhile the new weapon lay on the
         // ground (hanging in the air in front of the bot, "[F] swap to AWP" for the player near it) until the
         // slot was free
         foreach (var held in ws.MyWeapons.Select(h => h.Value).Where(w => w is { IsValid: true } && Same(w.DesignerName)).ToList())
             held!.Remove();
-        var given = bot.GiveNamedItem(item);
+        // a mod one the next frame: removed things go only at its end, and a grenade of the same class given
+        // in the same frame was refused (as in the Mod weapons menu)
+        if (sub != null) { Server.NextFrame(() => { if (bot.IsValid) Hide(bot, GiveItem(bot, item)); }); return; }
+        Hide(bot, GiveItem(bot, item));
+    }
+
+    void Hide(CCSPlayerController bot, nint given)
+    {
         if (given == 0) return;
         // it still reaches the inventory a tick later: invisible until it is in the bot's weapons
         var weapon = new CBasePlayerWeapon(given);
@@ -482,7 +494,7 @@ public partial class FakeMimic : BasePlugin
         var pawn = p?.PlayerPawn.Value;
         if (p == null || pawn == null || !p.PawnIsAlive) return "you must be alive";
 
-        _recWeapons = pawn.WeaponServices!.MyWeapons.Select(h => h.Value?.DesignerName).OfType<string>().ToList();
+        _recWeapons = pawn.WeaponServices!.MyWeapons.Select(h => h.Value).Where(w => w is { IsValid: true }).Select(w => ItemOf(w!)).ToList();
         if (!_bc.SetReplayPawn(p.Slot, pawn.Handle) || !_bc.StartRecord(p.Slot)) return "recording did not start";
         _recName = name;
         _recStartTick = Server.TickCount;
@@ -626,7 +638,7 @@ public partial class FakeMimic : BasePlugin
             foreach (var r in replays.Where(r => r.Bot is { IsValid: true }))
             {
                 r.Bot!.RemoveWeapons();
-                foreach (var w in r.Rec.Weapons) r.Bot.GiveNamedItem(w);
+                foreach (var w in r.Rec.Weapons) GiveItem(r.Bot, w);
             }
         });
         AddTimer(StartDelay, () =>

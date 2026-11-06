@@ -82,6 +82,11 @@ public partial class FakeMimic
         // the skins leave it alone: they would turn the defibrillator back into the chosen knife
         _modGiven.Add(weapon.Index);
         weapon.AcceptInput("ChangeSubclass", value: w.Name);
+        _modOf[weapon.Index] = w;
+        // recording a movement: the bot gets this one, not the class it is made on (it was given the plain negev
+        // for the minigun: the recording only had the weapon's definition, the base class's)
+        if (_recBuys != null && _recPlayer is { IsValid: true } rp && rp.Slot == p.Slot)
+            _recBuys.Add((Server.TickCount - _recStartTick, $"{w.Base}:{w.Name}"));
         // into the hand a moment later, the way the replays switch weapons (right after the subclass change a grenade
         // did not go; slot4 took the first grenade of the belt, "use" from the server did nothing)
         AddTimer(0.15f, () =>
@@ -106,6 +111,35 @@ public partial class FakeMimic
 
     // entity indexes of weapons given from this menu (the skins skip them)
     readonly HashSet<uint> _modGiven = new();
+
+    // ---- mod weapons in recordings ----
+    // A recording keeps a mod weapon as "<class>:<subclass>" (weapon_negev:minigun), in the weapons carried at the
+    // start and as a purchase when the menu gave it while recording; the bot gets the class turned into the
+    // subclass. Which weapon is which mod one: by entity index of what was given (the subclass is not readable
+    // back: VData.Name is the base class's), checked against the class in case the index was reused.
+    readonly Dictionary<uint, ModWeapon> _modOf = new();
+
+    static (string Base, string? Sub) SplitItem(string item)
+    {
+        var i = item.IndexOf(':');
+        return i < 0 ? (item, null) : (item[..i], item[(i + 1)..]);
+    }
+
+    string ItemOf(CBasePlayerWeapon w) =>
+        _modOf.TryGetValue(w.Index, out var m) && w.DesignerName == m.Base ? $"{m.Base}:{m.Name}" : w.DesignerName;
+
+    // gives an item of a recording; 0 when the game did not
+    nint GiveItem(CCSPlayerController p, string item)
+    {
+        var (bas, sub) = SplitItem(item);
+        var given = p.GiveNamedItem(bas);
+        if (given == 0 || sub == null) return given;
+        var weapon = new CBasePlayerWeapon(given);
+        _modGiven.Add(weapon.Index);
+        weapon.AcceptInput("ChangeSubclass", value: sub);
+        _modOf[weapon.Index] = _modWeapons.FirstOrDefault(w => w.Name == sub) ?? new ModWeapon("", sub, sub, bas);
+        return given;
+    }
 
     void ModWeaponsMenu(CCSPlayerController p)
     {
