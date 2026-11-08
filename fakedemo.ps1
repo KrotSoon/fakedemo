@@ -118,7 +118,7 @@ function Default-Settings {
     FakeWallhack  = $true     # bots and paths through walls add-on
     ExecFd        = $true     # +exec fd on start (the game stays in the main menu)
     Hlae          = $false    # start CS2 through HLAE (always with -insecure): demos play with mirv_streams
-    HlaePath      = ""        # HLAE.exe; empty = found in Program Files
+    HlaePath      = ""        # HLAE.exe chosen in the launcher; empty = found by itself (Find-Hlae)
     HlaeRecDir    = ""        # where mirv_streams writes (V3 config); empty = Hlae-RecDir's default
     Mods          = ""        # workshop item ids mounted for the session (not maps: weapons, models), comma separated
     MapKind       = ""        # map to load right away: "" = main menu, "official", "workshop"
@@ -521,7 +521,14 @@ function Install-V3($s, [string]$cfg) {
   & $w "v3_path_rec.cfg" "mirv_streams record name `"$rec`""
   # mirv_script_load wants a full path
   & $w "v3_path_js.cfg" "mirv_script_load `"$(Join-Path $cfg 'v3_attach.js')`""
-  & $w "fd_hlae.cfg" "mirv_script_load `"$(Join-Path $cfg 'fd_v3.js')`""
+  $hlaeLines = @("mirv_script_load `"$(Join-Path $cfg 'fd_v3.js')`"")
+  # the Blender bridge: its add-on writes the script, it waits for Blender by itself, so nothing to type in the console
+  $bridge = [IO.Path]::Combine($env:APPDATA, "cs2bridge\cs2bridge.js")
+  if (Test-Path -LiteralPath $bridge) {
+    Copy-Item -LiteralPath $bridge (Join-Path $cfg "fd_bridge.js") -Force
+    $hlaeLines += "mirv_script_load `"$(Join-Path $cfg 'fd_bridge.js')`""
+  }
+  & $w "fd_hlae.cfg" ($hlaeLines -join "`r`n")
   Log "V3 copied to $cfg, recordings go to $rec"
 }
 
@@ -1153,11 +1160,48 @@ function Start-Overlay {
 # ---------------- HLAE ----------------
 # With "through HLAE" on, HLAE starts the game itself (it must hook it from the first moment): the fake
 # session runs with HLAE, so a demo recorded there plays with mirv_streams right away (H > Demos > Watch)
-function Find-Hlae($s) {
-  foreach ($p in @($s.HlaePath, "${env:ProgramFiles(x86)}\HLAE\HLAE.exe", "$env:ProgramFiles\HLAE\HLAE.exe")) {
-    if ($p -and (Test-Path $p) -and (Test-Path (Join-Path (Split-Path $p) "x64\AfxHookSource2.dll"))) { return $p }
-  }
+
+# HLAE.exe from a path given as the file, its folder or the folder above it; only a full HLAE (the hook next to it)
+# [IO.Path] and not Join-Path: Join-Path throws on a drive that is not there (a saved path on an unplugged disk)
+function Hlae-Exe([string]$p) {
+  if (-not $p) { return $null }
+  try {
+    foreach ($f in @($p, [IO.Path]::Combine($p, "HLAE.exe"), [IO.Path]::Combine($p, "HLAE\HLAE.exe"))) {
+      if ((Test-Path -LiteralPath $f -PathType Leaf) -and
+          (Test-Path -LiteralPath ([IO.Path]::Combine([IO.Path]::GetDirectoryName($f), "x64\AfxHookSource2.dll")) -PathType Leaf)) { return $f }
+    }
+  } catch {}
   $null
+}
+
+# HLAE can be installed anywhere and the installer writes no path to the registry, but it leaves a shortcut
+function Hlae-FromShortcuts {
+  try {
+    $shell = New-Object -ComObject WScript.Shell
+    $links = @(
+      foreach ($d in "CommonPrograms", "Programs") {
+        Get-ChildItem -LiteralPath ([Environment]::GetFolderPath($d)) -Recurse -File -Filter "*HLAE*.lnk" -ErrorAction SilentlyContinue
+      }
+      foreach ($d in "CommonDesktopDirectory", "DesktopDirectory") {
+        Get-ChildItem -LiteralPath ([Environment]::GetFolderPath($d)) -File -Filter "*HLAE*.lnk" -ErrorAction SilentlyContinue
+      }
+    )
+    foreach ($l in $links) {
+      $link = $shell.CreateShortcut($l.FullName)
+      # an installer's shortcut can point at its own icon: the working folder is then the real place
+      foreach ($p in @($link.TargetPath, $link.WorkingDirectory)) { $exe = Hlae-Exe $p; if ($exe) { return $exe } }
+    }
+  } catch {}
+  $null
+}
+
+# the folder chosen in the launcher first, then the usual places, then the shortcuts
+function Find-Hlae($s) {
+  foreach ($p in @($s.HlaePath, "${env:ProgramFiles(x86)}\HLAE", "$env:ProgramFiles\HLAE")) {
+    $exe = Hlae-Exe $p
+    if ($exe) { return $exe }
+  }
+  Hlae-FromShortcuts
 }
 
 function Start-Cs2($s, [string[]]$a) {

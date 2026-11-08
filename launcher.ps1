@@ -590,6 +590,13 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
             </DockPanel>
           </Border>
 
+          <!-- outside HlaeMore: the switch is off until HLAE is found, and this is how it gets found -->
+          <TextBlock Style="{StaticResource Caption}" Text="Папка HLAE"/>
+          <DockPanel>
+            <Button x:Name="BtnHlaeDir" DockPanel.Dock="Right" Style="{StaticResource Small}" Content="Обзор" Margin="8,0,0,0"/>
+            <TextBox x:Name="TbHlae" Style="{StaticResource Field}" IsReadOnly="True"/>
+          </DockPanel>
+
           <StackPanel x:Name="HlaeMore">
             <TextBlock Style="{StaticResource Caption}" Text="Папка записи (V3 включается в демке сам, клавиши — fehelp)"/>
             <DockPanel>
@@ -724,8 +731,9 @@ function Load-Controls {
 function Update-HlaeHint {
   $h = Find-Hlae $script:s
   (El "SwHlae").IsEnabled = [bool]$h -or [bool]$script:s.Hlae
-  (El "HlaeHint").Text = $(if ($h) { "игра и демки с HLAE (mirv_streams для слоёв), всегда с -insecure · $(Split-Path $h)" }
-    else { "HLAE не найден: поставь его с advancedfx.org (в Program Files\HLAE)" })
+  (El "HlaeHint").Text = $(if ($h) { "игра и демки с HLAE (mirv_streams для слоёв), всегда с -insecure" }
+    else { "HLAE не найден: укажи его папку ниже или поставь с advancedfx.org" })
+  (El "TbHlae").Text = $(if ($h) { Split-Path $h } else { "" })
   # the recording folder and HLAE configs only matter with HLAE on
   (El "HlaeMore").Visibility = $(if ($script:s.Hlae) { "Visible" } else { "Collapsed" })
 }
@@ -1219,7 +1227,10 @@ function Watch-Take($t) {
   # through HLAE (setting): the demo opens with V3 and mirv_streams for the layers; HLAE only with -insecure.
   # The configs first: V3, its paths and fd_unfake (your binds after the demo) may not be in the game yet
   if ($script:s.Hlae) { Restore-OwnKeys $script:s; Install-Cfg $script:s }
-  Start-Cs2 $script:s $(if ($script:s.Hlae) { @("-insecure", "+exec", "fd_hlae", "+exec", "fd_watch", "+playdemo", $demo) } else { @("+playdemo", $demo) })
+  # through HLAE the console port stays on too (the other tools and the next Watch type into it); a plain start stays plain
+  $nc = Netcon-Of $script:s
+  $port = $(if ($script:s.Hlae -and $nc.Port) { @("-netconport", [string]$nc.Port) + $(if ($nc.Pass) { @("-netconpassword", $nc.Pass) } else { @() }) } else { @() })
+  Start-Cs2 $script:s $(if ($script:s.Hlae) { @("-insecure") + $port + @("+exec", "fd_hlae", "+exec", "fd_watch", "+playdemo", $demo) } else { @("+playdemo", $demo) })
   Show-Info "Запускаю CS2 с демкой $demo$(if ($script:s.Hlae) { ' через HLAE' })…"
 }
 
@@ -1605,6 +1616,16 @@ public static class FolderPicker {
   if (-not $path) { return }
   if (-not (Test-Path ([IO.Path]::Combine($path, "game\csgo\gameinfo.gi")))) { Show-Error "Это не папка CS2: нет game\csgo\gameinfo.gi"; return }
   $script:s.Cs2Path = $path; (El "TbCs2").Text = $path; Save; Refresh
+})
+
+(El "BtnHlaeDir").Add_Click({
+  $owner = (New-Object Windows.Interop.WindowInteropHelper $win).Handle
+  $h = Find-Hlae $script:s
+  $path = [FolderPicker]::Pick($owner, "Папка HLAE (где лежит HLAE.exe)", $(if ($h) { Split-Path $h } else { $env:ProgramFiles }))
+  if (-not $path) { return }
+  $exe = Hlae-Exe $path
+  if (-not $exe) { Show-Error "Это не папка HLAE: нужны HLAE.exe и x64\AfxHookSource2.dll"; return }
+  $script:s.HlaePath = $exe; Save; Update-HlaeHint
 })
 
 (El "BtnRecDir").Add_Click({

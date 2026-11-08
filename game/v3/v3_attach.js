@@ -14,8 +14,9 @@
     }
     mirv.events.cViewRenderSetupView.off(VIEW_ID);
     mirv.events.cViewRenderSetupView.off(ID + '/sm');
+    mirv.events.cViewRenderSetupView.off(ID + '/sens');
 
-    const msg = (s) => mirv.message('[ac] ' + s + '\n');
+    const msg =(s) => mirv.message('[ac] ' + s + '\n');
     const warn = (s) => mirv.warning('[ac] ' + s + '\n');
 
     // ---- settings (what presets change) ----
@@ -604,7 +605,37 @@
             '\n     (copy into v3_attach.cfg, rename "mypreset")\n  ' + status());
     });
 
-    globalThis[ID] = { commands: cmds, st }; // keep references, otherwise the commands get garbage collected (st: for debug probes)
+    // ---- free camera sensitivity, the same at any FPS and any playback speed ----
+    // HLAE multiplies keys and mouse by its frame time (e.absTime), and that time shrinks with the playback speed
+    // (x0.33 on Slow, 1e-7 on pause) and follows the FPS. Both sensitivities are recalculated from it:
+    //   mouse: msens * absTime stays 0.024 / 120; keys: ksens * absTime * FPS stays 0.36 (the values the camera was tuned for).
+    // HLAE stores ksens when a key goes down, so a key held through a speed change keeps the old value until released.
+    const sens = { on: true, last: 0, wall: 1 / 120, abs: 0, k: 0, m: 0 };
+    const MOUSE_AT_120 = 0.024 / 120, KEYS = 0.36;
+    const changed = (a, b) => b === 0 || Math.abs(a - b) / b > 0.05;
+    mirv.events.cViewRenderSetupView.on(ID + '/sens', (e) => {
+        if (!sens.on || st.recording) { sens.last = 0; sens.abs = 0; sens.k = 0; sens.m = 0; return undefined; }
+        const now = Date.now() / 1000, abs = e.absTime;
+        if (sens.last > 0 && abs > 0) {
+            const dt = now - sens.last;
+            if (dt > 0.001 && dt < 0.25) sens.wall += (dt - sens.wall) * 0.1;
+            // a new speed changes abs at once, so it is followed fast
+            sens.abs = sens.abs === 0 || changed(abs, sens.abs) ? abs : sens.abs + (abs - sens.abs) * 0.25;
+            const k = KEYS * sens.wall / sens.abs, m = MOUSE_AT_120 / sens.abs;
+            if (changed(k, sens.k) || changed(m, sens.m)) {
+                sens.k = k; sens.m = m;
+                exec('mirv_input cfg ksens ' + k.toFixed(5) + '; mirv_input cfg msens ' + m.toFixed(5));
+            }
+        }
+        sens.last = now;
+        return undefined;
+    });
+    reg('v3sens', 'v3sens 1|0 - keep the free camera sensitivity the same at any FPS and playback speed (default 1)', (a) => {
+        sens.on = a[0] !== '0';
+        sens.last = 0; sens.abs = 0; sens.k = 0; sens.m = 0;
+    });
+
+    globalThis[ID] = { commands: cmds, st, sens }; // keep references, otherwise the commands get garbage collected (st: for debug probes)
     // last expression = what mirv_script_load prints (otherwise it prints "undefined")
     '[ac] loaded. ac_list = players/objects, ac = on/off, h_att = help';
 }
