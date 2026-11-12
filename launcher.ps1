@@ -554,7 +554,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
           <TextBlock Style="{StaticResource Caption}" Text="Свои параметры запуска"/>
           <TextBox x:Name="TbOptions" Style="{StaticResource Field}"/>
-          <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="-insecure добавляется сам, когда включены плагины или HLAE"/>
+          <TextBlock Style="{StaticResource Hint}" Margin="2,4,0,0" Text="-insecure добавляется всегда: FakeDemo не для игры с VAC"/>
 
           <Border Style="{StaticResource Card}" Margin="0,12,0,0">
             <DockPanel>
@@ -758,7 +758,7 @@ function Update-Summary {
   (El "SwDirector").IsEnabled = [bool]$s.Plugins
   (El "SwWallhack").IsEnabled = [bool]$s.Plugins
   (El "Modules").Opacity = $(if ($s.Plugins) { 1 } else { 0.45 })
-  (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, обычный запуск" }
+  (El "PluginsHint").Text = if ($s.Plugins) { "FakeMimic, игра запускается с -insecure" } else { "выкл: только конфиги, игра всё равно с -insecure" }
   $where = if ($s.MapId) { $s.MapTitle } else { "главное меню" }
   $mods = @(Chosen-Mods)
   (El "PlaySub").Text = "$where · $(if ($s.Plugins) { 'с плагинами' } else { 'только конфиги' })$(if ($s.Hlae) { ' · через HLAE' })" +

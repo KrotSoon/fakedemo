@@ -834,6 +834,19 @@ function Workshop-Maps($s) { Workshop-Items $s | Where-Object Kind -eq "workshop
 # subscribed workshop mods (not maps): Id, Title, Size, Parts (what they change), Preview file
 function Workshop-Mods($s) { Workshop-Items $s | Where-Object Kind -eq "mod" }
 
+# the launcher's map with the mods that are on: "map_workshop <map item>,<mod>,<mod> <map>" mounts them all
+# (checked); $null when there is nothing to type in (no map, or an official map without mods: +map does it)
+function Session-MapCmd($s) {
+  $mods = @(Mod-Ids $s)
+  if ($s.MapKind -eq "workshop" -and $s.MapId) {
+    $map = (Workshop-Maps $s | Where-Object Id -eq $s.MapId | Select-Object -First 1).Map
+    if (-not $map) { return $null }
+    return "map_workshop $((@($s.MapId) + $mods) -join ',') $map"
+  }
+  if ($s.MapId -and $mods.Count) { return "map_workshop $($mods -join ',') $($s.MapId)" }
+  $null
+}
+
 # fd_ws.cfg: ws = numbered list, ws1 ws2 ... = exec fd + that map (fd.cfg execs this file)
 function Write-WsCfg($s, [string]$cfg) {
   $maps = @(Workshop-Maps $s | Sort-Object Title)
@@ -849,6 +862,9 @@ function Write-WsCfg($s, [string]$cfg) {
   if (-not $i) { $list += 'echo "  none: subscribe to a map in the Steam Workshop"' }
   $list += 'echo "  type ws<number>, e.g. ws1"', 'echo ""'
   $alias += 'alias ws "exec fd_blank; exec fd_ws_list"'
+  # fdgo = the map chosen in the launcher with its mods, for when the launcher cannot type it in (no netcon)
+  $go = Session-MapCmd $s
+  if ($go) { $alias += "alias fdgo `"exec fd; $go`"" }
   [IO.File]::WriteAllLines((Join-Path $cfg "fd_ws.cfg"), [string[]]$alias)
   [IO.File]::WriteAllLines((Join-Path $cfg "fd_ws_list.cfg"), [string[]]$list)
 }
@@ -918,6 +934,48 @@ function Dep-Zip($d, $repo) {
   $dst
 }
 
+# The author's newest build (deps.json "latest"): a CS2 update breaks Metamod / CounterStrikeSharp until their
+# authors ship a fix, and the pinned build kept crashing the game until a FakeDemo release. Asked at most every
+# 6 hours. GitHub gives the file's SHA256 (checked); Metamod's build server gives none (HTTPS only, zip must open).
+# $null = the pinned build is the newest; throws when offline (the caller falls back to the pinned one)
+function Dep-Newest($d) {
+  $cache = Join-Path $Data "deps"
+  New-Item -ItemType Directory -Force $cache | Out-Null
+  $state = Join-Path $cache ("newest_" + ($d.asset -replace '[^\w]', '') + ".txt")
+  if ((Test-Path $state) -and ((Get-Date) - (Get-Item $state).LastWriteTime).TotalHours -lt 6) {
+    $f = (Get-Content $state -Raw).Trim()
+    if ($f -eq $d.file) { return $null }
+    if (Test-Path (Join-Path $cache $f)) { return (Join-Path $cache $f) }
+  }
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  $wc = New-Object Net.WebClient; $wc.Headers.Add("User-Agent", "FakeDemo")
+  $sha = $null
+  if ($d.latest -match '/releases/latest$') {
+    $rel = $wc.DownloadString($d.latest) | ConvertFrom-Json
+    $a = @($rel.assets | Where-Object { $_.name -like "$($d.asset)*.zip" })[0]
+    if (-not $a) { throw "no $($d.asset)*.zip in $($rel.tag_name)" }
+    $file = $a.name; $url = $a.browser_download_url
+    if ($a.digest -match '^sha256:([0-9a-f]{64})$') { $sha = $Matches[1].ToUpper() }
+  } else {
+    $file = $wc.DownloadString($d.latest).Trim()
+    $url = $d.latest.Substring(0, $d.latest.LastIndexOf('/') + 1) + $file
+  }
+  if ($file -notmatch "^$([regex]::Escape($d.asset))[\w.+-]*\.zip$") { throw "unexpected newest file name '$file'" }
+  $dst = Join-Path $cache $file
+  if ($file -ne $d.file -and -not ((Test-Path $dst) -and (-not $sha -or (Get-FileHash $dst).Hash -eq $sha))) {
+    Log "downloading the newest $($d.name): $file..."
+    $wc.DownloadFile($url, "$dst.part")
+    if ($sha -and (Get-FileHash "$dst.part").Hash -ne $sha) { Remove-Item "$dst.part"; throw "$file`: checksum mismatch, download refused" }
+    try { [IO.Compression.ZipFile]::OpenRead("$dst.part").Dispose() } catch { Remove-Item "$dst.part"; throw "$file is not a whole zip" }
+    Move-Item "$dst.part" $dst -Force
+    # older newest builds go; the pinned one stays as the fallback
+    Get-ChildItem $cache -Filter "$($d.asset)*.zip" | Where-Object { $_.Name -ne $file -and $_.Name -ne $d.file } | Remove-Item -Force -ErrorAction SilentlyContinue
+  }
+  Set-Content $state $file -Encoding ASCII
+  if ($file -eq $d.file) { return $null }
+  $dst
+}
+
 # writes a file into the game and remembers it in the manifest
 function Put([string]$rel, [scriptblock]$write) {
   $p = Join-Path $script:csgo $rel
@@ -943,7 +1001,12 @@ function Plugins-On($s) {
   try {
     # Metamod, CounterStrikeSharp, CS2-Bot-Controller (+ its CSS API), in that order
     foreach ($d in $deps.items) {
-      $zip = [IO.Compression.ZipFile]::OpenRead((Dep-Zip $d $deps.repo))
+      $path = $null
+      if ($d.PSObject.Properties['latest']) {   # not every item has one (Bot-Controller is pinned: its API changes)
+        try { $path = Dep-Newest $d } catch { Log "WARNING newest $($d.name) not checked, the pinned $($d.version) is used: $($_.Exception.Message)" }
+      }
+      if ($path) { Log "$($d.name): $(Split-Path $path -Leaf) (newest from its author)" } else { $path = Dep-Zip $d $deps.repo }
+      $zip = [IO.Compression.ZipFile]::OpenRead($path)
       try {
         foreach ($e in $zip.Entries | Where-Object { $_.Name }) {
           Put ($e.FullName -replace '/', '\') { param($p) [IO.Compression.ZipFileExtensions]::ExtractToFile($e, $p, $true) }
@@ -1095,8 +1158,9 @@ function Netcon-Of($s) {
 
 function Launch-Args($s) {
   $a = @()
-  # HLAE hooks the game: never without -insecure, the same as the plugins
-  if ($s.Plugins -or $s.Hlae) { $a += "-insecure" }
+  # always -insecure (krot, 2026-11-12: the launcher is never for VAC play). Plugins and HLAE need it, and
+  # without it CS2 opens no netcon port, so a workshop map or a mod could not be typed in
+  $a += "-insecure"
   $nc = Netcon-Of $s
   if ($nc.Port) {
     $a += "-netconport", $nc.Port
@@ -1145,7 +1209,7 @@ function Load-WorkshopMap($s) {
     $c = New-Object Net.Sockets.TcpClient
     try { $c.Connect("127.0.0.1", $nc.Port); $client = $c } catch { $c.Dispose(); Start-Sleep -Milliseconds 500 }
   }
-  if (-not $client) { Log "WARNING game console not reachable: load the map in game with ws"; return }
+  if (-not $client) { Log "WARNING game console not reachable: in game type fdgo to load the map"; return }
   $netLog = Join-Path $Data "netcon.log"
   try { [IO.File]::WriteAllText($netLog, "") } catch { }   # only a debug copy of what the game answered
   function Heard([string]$text) { if ($text) { Append-Shared $netLog $text } ; $text }
@@ -1153,17 +1217,28 @@ function Load-WorkshopMap($s) {
     $st = $client.GetStream()
     if ($nc.Pass) { Netcon-Send $st "PASS $($nc.Pass)" }
     # 1. the console executes commands
-    $ready = $false; $tries = 0
+    $ready = $false; $menu = $false; $tries = 0
     while (-not $ready -and (Get-Date) -lt $deadline -and (Cs2-Running)) {
       # the password again now and then, in case the game dropped it while loading
       if ($nc.Pass -and $tries -and $tries % 5 -eq 0) { Netcon-Send $st "PASS $($nc.Pass)" }
       $tries++
       Netcon-Send $st "echo fdready"
-      $ready = (Heard (Netcon-Read $st 2000 2000)) -match 'fdready'
+      $said = Heard (Netcon-Read $st 2000 2000)
+      $ready = $said -match 'fdready'
+      $menu = $menu -or $said -match 'MaybeSwitchToGameLoop|safe to update the app'
     }
-    if (-not $ready) { Log "WARNING game console never answered: load the map in game with ws"; return }
-    # 2. the main menu finished loading: console quiet for a while
-    [void](Heard (Netcon-Read $st 4000 60000))
+    if (-not $ready) { Log "WARNING game console never answered: in game type fdgo to load the map"; return }
+    # 2. the main menu finished loading. Waiting for a quiet console took up to a minute (the menu keeps
+    # printing), so: the game's own line for the menu loop, or that it told Steam it is up; then a short settle
+    # (said before the console answered: then 4 s of silence, as before, ends the wait)
+    $seen = $menu; $quiet = 0; $t = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $seen -and $quiet -lt 4 -and $t.Elapsed.TotalSeconds -lt 60 -and (Cs2-Running)) {
+      $said = Heard (Netcon-Read $st 1000 1000)
+      $seen = $said -match 'MaybeSwitchToGameLoop|safe to update the app'
+      $quiet = if ($said) { 0 } else { $quiet + 1 }
+    }
+    Log "game menu ready after $([int]$t.Elapsed.TotalSeconds) s of waiting$(if (-not $seen) { ' (no menu line seen)' })"
+    [void](Heard (Netcon-Read $st 1500 5000))
     # 3. the map; once more if the game said nothing about it. A workshop map: its item and its map name;
     # a mod: the mod's item and the map chosen in the launcher (from the game)
     # the addons go in one list: "map_workshop <map item>,<mod>,<mod> <map>" mounts them all (checked)
@@ -1259,6 +1334,7 @@ function Find-Hlae($s) {
 }
 
 function Start-Cs2($s, [string[]]$a) {
+  if ($a -notcontains "-insecure") { $a = @("-insecure") + $a }   # the launcher's Watch too
   if (-not $s.Hlae) {
     Log "starting CS2: $($a -join ' ')"
     Start-Process (Join-Path (Steam-Path) "steam.exe") -ArgumentList (@("-applaunch", "730") + $a)
@@ -1266,7 +1342,6 @@ function Start-Cs2($s, [string[]]$a) {
   }
   $hlae = Find-Hlae $s
   if (-not $hlae) { throw "HLAE not found: install it (advancedfx.org) or set its folder in the launcher" }
-  if ($a -notcontains "-insecure") { throw "HLAE only with -insecure" }
   $cs2 = Join-Path $s.Cs2Path "game\bin\win64\cs2.exe"
   $line = (@("-steam") + $a | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
   Log "starting CS2 through HLAE: $line"
