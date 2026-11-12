@@ -95,16 +95,59 @@ function Save-KeyBinds($binds) {
     if ($b.Key -ne $def) { $o[$b.Cmd] = $b.Key }
   }
   New-Item -ItemType Directory -Force $Data | Out-Null
-  [IO.File]::WriteAllText($KeysFile, (ConvertTo-Json $o), (New-Object Text.UTF8Encoding $false))
+  Write-Whole $KeysFile (ConvertTo-Json $o)
 }
 
 # every key fake mode binds: the actions' and the menu digits
 function Fake-Keys { @(Key-Binds | Where-Object Key | ForEach-Object Key) + @(1..9 | ForEach-Object { "$_" }) }
 
+# last.log and netcon.log are read every second by the launcher and hudcam while being written: Add-Content /
+# Get-Content lock each other out ("used by another process", measured: most tries fail under load), so both
+# sides open them shared. A log line that still cannot go in is dropped: it never stops the work
+function Append-Shared([string]$file, [string]$text) {
+  $b = [Text.Encoding]::UTF8.GetBytes($text)
+  for ($i = 0; $i -lt 100; $i++) {   # up to ~2 s
+    try {
+      # AppendData: Windows puts each write at the end itself, two writers (play + previews) do not overwrite each other
+      $fs = New-Object IO.FileStream($file, [IO.FileMode]::Append, [Security.AccessControl.FileSystemRights]::AppendData, [IO.FileShare]'ReadWrite, Delete', 4096, [IO.FileOptions]::None)
+      try { $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      return
+    } catch { [Threading.Thread]::Sleep(20) }
+  }
+}
+function Read-Shared([string]$file) {
+  try {
+    $r = New-Object IO.StreamReader((New-Object IO.FileStream($file, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]'ReadWrite, Delete')), [Text.Encoding]::UTF8)
+    try { $r.ReadToEnd() } finally { $r.Close() }
+  } catch { "" }
+}
+function Log-Lines { @((Read-Shared $LogFile) -split "\r?\n" | Where-Object { $_ }) }
+
 function Log([string]$m) {
   Write-Host $m
   New-Item -ItemType Directory -Force $Data | Out-Null
-  Add-Content -Path $LogFile -Value "$(Get-Date -Format 'HH:mm:ss') $m" -Encoding UTF8
+  Append-Shared $LogFile "$(Get-Date -Format 'HH:mm:ss') $m`r`n"
+}
+
+# a file can stay open a moment after its program is gone (crash dump, antivirus, Steam Cloud sync) or while
+# another of our processes writes it: wait and repeat. Only for steps that are safe to run again
+function Retry-Io([scriptblock]$b, [int]$tries = 30, [int]$ms = 2000) {
+  for ($try = 1; ; $try++) {
+    try { return (& $b) } catch {
+      $x = $_.Exception   # a .NET call ([IO.File]::...) comes wrapped in MethodInvocationException
+      while ($x -is [Management.Automation.MethodInvocationException] -and $x.InnerException) { $x = $x.InnerException }
+      if (-not ($x -is [IO.IOException] -or $x -is [UnauthorizedAccessException]) -or $try -ge $tries) { throw }
+      if ($try -eq 1 -and $ms -ge 1000) { Log "a file is in use, waiting for it: $($x.Message)" }
+      Start-Sleep -Milliseconds $ms
+    }
+  }
+}
+
+# whole file or nothing: a reader at the same moment gets the old text, never half of the new one
+function Write-Whole([string]$file, [string]$text) {
+  $tmp = "$file.tmp"
+  [IO.File]::WriteAllText($tmp, $text, (New-Object Text.UTF8Encoding $false))
+  Retry-Io { if (Test-Path -LiteralPath $file) { [IO.File]::Replace($tmp, $file, [NullString]::Value) } else { [IO.File]::Move($tmp, $file) } } 25 200
 }
 
 # ---------------- settings ----------------
@@ -134,7 +177,9 @@ function Load-Settings {
   $s = Default-Settings
   if (Test-Path $SettingsFile) {
     # a broken file (cut short, edited by hand) must not stop the launcher: it is kept aside, defaults are used
-    $saved = try { Get-Content $SettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch {
+    # read errors (the launcher saving it right now) are waited out; only text that does not parse is "broken"
+    $raw = Retry-Io { [IO.File]::ReadAllText($SettingsFile, [Text.Encoding]::UTF8) } 25 200
+    $saved = try { $raw | ConvertFrom-Json } catch {
       Copy-Item $SettingsFile (Join-Path $Data "settings.broken.json") -Force
       Log "WARNING settings.json is broken (kept as settings.broken.json), defaults used: $($_.Exception.Message)"
       $null
@@ -147,7 +192,7 @@ function Load-Settings {
 
 function Save-Settings($s) {
   New-Item -ItemType Directory -Force $Data | Out-Null
-  $s | ConvertTo-Json | Set-Content -Path $SettingsFile -Encoding UTF8
+  Write-Whole $SettingsFile ($s | ConvertTo-Json)
 }
 
 # ---------------- Steam / CS2 ----------------
@@ -970,16 +1015,8 @@ function Unmount-Mods($s, [string]$gi) {
   if (-not (Get-ChildItem $dir -Force)) { Remove-Item $dir -Force }
 }
 
-function Plugins-Off($s) {
-  Need-Closed
-  $csgo = Csgo $s
-  $gi = Join-Path $csgo "gameinfo.gi"
-  # only our line, so a gameinfo.gi updated by Steam in the meantime is kept
-  $text = Get-Content $gi -Raw
-  $clean = $text -replace "[ \t]*Game[ \t]+csgo/addons/metamod[^\r\n]*\r?\n", ""
-  if ($clean -ne $text) { [IO.File]::WriteAllText($gi, $clean) }
-  Unmount-Mods $s $gi
-
+# what Plugins-On put in (the manifest) or an old 0.5 install; safe to run again after a failure
+function Remove-Plugins([string]$csgo) {
   $files = Load-Manifest
   if ($files.Count) {
     $dirs = @{}
@@ -1009,6 +1046,23 @@ function Plugins-Off($s) {
   }
   $addons = Join-Path $csgo "addons"
   if ((Test-Path $addons) -and -not (Get-ChildItem $addons -Force)) { Remove-Item $addons }
+}
+
+function Plugins-Off($s) {
+  Need-Closed
+  $csgo = Csgo $s
+  $gi = Join-Path $csgo "gameinfo.gi"
+  # after cs2.exe is gone its .NET files (mscordaccore.dll) can stay open a while longer (crash dump,
+  # antivirus scan): Retry-Io waits, every step here is safe to run again. gameinfo.gi first: with its line
+  # gone the game does not load what may still be left
+  Retry-Io {
+    # only our line, so a gameinfo.gi updated by Steam in the meantime is kept
+    $text = Get-Content $gi -Raw
+    $clean = $text -replace "[ \t]*Game[ \t]+csgo/addons/metamod[^\r\n]*\r?\n", ""
+    if ($clean -ne $text) { [IO.File]::WriteAllText($gi, $clean) }
+    Unmount-Mods $s $gi
+  }
+  Retry-Io { Remove-Plugins $csgo }
   # CS2 runs it on every map start in custom mode, and game_type stays 3 after a session without
   # 'unfake': a normal game later turned fake mode on and saved the fake binds into the Steam profile.
   # Play puts it back (Install-Cfg)
@@ -1093,8 +1147,8 @@ function Load-WorkshopMap($s) {
   }
   if (-not $client) { Log "WARNING game console not reachable: load the map in game with ws"; return }
   $netLog = Join-Path $Data "netcon.log"
-  Set-Content $netLog "" -Encoding UTF8
-  function Heard([string]$text) { if ($text) { Add-Content $netLog $text -Encoding UTF8 -NoNewline } ; $text }
+  try { [IO.File]::WriteAllText($netLog, "") } catch { }   # only a debug copy of what the game answered
+  function Heard([string]$text) { if ($text) { Append-Shared $netLog $text } ; $text }
   try {
     $st = $client.GetStream()
     if ($nc.Pass) { Netcon-Send $st "PASS $($nc.Pass)" }
@@ -1222,8 +1276,9 @@ function Start-Cs2($s, [string[]]$a) {
 
 function Play($s) {
   Need-Closed
-  Restore-OwnKeys $s   # before Build-Unfake reads them: a clean profile refreshes the clean copy
-  Install-Cfg $s
+  # Steam may still be syncing the profile files of the last game
+  Retry-Io { Restore-OwnKeys $s }   # before Build-Unfake reads them: a clean profile refreshes the clean copy
+  Retry-Io { Install-Cfg $s }
   if ($s.Plugins) {
     # stopped half way (no CS2 profile, a download failed): what went in comes out, the game is not started
     # Only when something of ours went in (the manifest): without one Plugins-Off removes the old 0.5 install
@@ -1251,7 +1306,7 @@ function Play($s) {
   } finally {
     Get-Process FakeDemoOverlay -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Plugins-Off $s
-    Restore-OwnKeys $s -AfterSession
+    Retry-Io { Restore-OwnKeys $s -AfterSession }
   }
 }
 
@@ -1303,8 +1358,10 @@ function Update {
   $old = Join-Path $Here "FakeDemo.old.exe"
   if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
   if ((Test-Path $exe) -and (Test-Path (Join-Path $root "FakeDemo.exe"))) { Move-Item $exe $old -Force }
-  Copy-Item (Join-Path $root "*") $Here -Recurse -Force
-  Remove-Item $tmp -Recurse -Force
+  # an antivirus may still be scanning a file just written: copying again is safe
+  Retry-Io { Copy-Item (Join-Path $root "*") $Here -Recurse -Force } 10
+  # leftovers of the download do not matter: the next update clears the folder first
+  try { Remove-Item $tmp -Recurse -Force } catch { Log "WARNING download folder not removed: $($_.Exception.Message)" }
   Log "updated $Version -> $($r.Version). Restart the launcher"
 }
 

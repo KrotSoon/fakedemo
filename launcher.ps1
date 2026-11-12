@@ -252,6 +252,20 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
+    <!-- a Hint line that can be selected and copied (errors) -->
+    <Style x:Key="Msg" TargetType="TextBox">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="IsReadOnly" Value="True"/>
+      <Setter Property="IsUndoEnabled" Value="False"/>
+      <Setter Property="SelectionBrush" Value="#E4AE39"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox"><ScrollViewer x:Name="PART_ContentHost" Background="Transparent"/></ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key="Caption" TargetType="TextBlock">
       <Setter Property="Foreground" Value="#B0FFFFFF"/>
       <Setter Property="FontSize" Value="12"/>
@@ -423,7 +437,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
             <Ellipse x:Name="Dot" Width="9" Height="9" Margin="0,5,10,0" VerticalAlignment="Top" Fill="#5BD08A"/>
             <StackPanel>
               <TextBlock x:Name="StatusText" Foreground="{StaticResource Text}" FontSize="13" TextWrapping="Wrap"/>
-              <TextBlock x:Name="LogText" Style="{StaticResource Hint}" Margin="0,3,0,0" Visibility="Collapsed"/>
+              <TextBox x:Name="LogText" Style="{StaticResource Msg}" Margin="0,3,0,0" Visibility="Collapsed"/>
             </StackPanel>
           </DockPanel>
         </Border>
@@ -498,7 +512,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
           <StackPanel x:Name="TkList" Margin="0,0,8,0"/>
         </ScrollViewer>
         <TextBlock x:Name="TkEmpty" Style="{StaticResource Hint}" Margin="2,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
-        <TextBlock x:Name="TkMsg" Style="{StaticResource Hint}" Margin="2,6,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+        <TextBox x:Name="TkMsg" Style="{StaticResource Msg}" Margin="2,6,0,0" Visibility="Collapsed"/>
         <DockPanel Margin="-6,8,-6,0">
           <TextBlock x:Name="TkTotal" DockPanel.Dock="Right" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,6,0"/>
           <Button x:Name="BtnTkBack" Style="{StaticResource Link}" Content="&#x2190; Назад" HorizontalAlignment="Left"/>
@@ -1044,7 +1058,7 @@ function Save-TakeLog([string]$json) {
   $recs = @($script:takes | Where-Object Json -eq $json | ForEach-Object Rec)
   foreach ($r in $recs) { foreach ($old in "Best", "Verdict") { $r.PSObject.Properties.Remove($old) } }
   $text = if ($recs.Count) { ConvertTo-Json -InputObject $recs -Depth 6 } else { "[]" }
-  [IO.File]::WriteAllText($json, $text, (New-Object Text.UTF8Encoding $false))
+  Write-Whole $json $text
 }
 
 function Size-Text([long]$b) { if ($b -lt 1MB) { "{0:0} КБ" -f ($b / 1KB) } elseif ($b -lt 1GB) { "{0:0.#} МБ" -f ($b / 1MB) } else { "{0:0.##} ГБ" -f ($b / 1GB) } }
@@ -1427,7 +1441,7 @@ function Start-Play {
   if (Playing -or -not (El "BtnPlay").IsEnabled) { return }
   [Windows.Input.Keyboard]::ClearFocus()   # a field being edited saves on lost focus
   Save-Settings $script:s
-  if (Test-Path $LogFile) { Remove-Item $LogFile }
+  if (Test-Path $LogFile) { try { Remove-Item $LogFile } catch { try { [IO.File]::WriteAllText($LogFile, "") } catch { } } }
   $script:proc = Run-Hidden "play"
   Refresh
 }
@@ -1493,20 +1507,20 @@ function Refresh {
   }
   if ($script:proc -and $script:proc.HasExited -and -not $script:procSeen) {
     $script:procSeen = $true
-    $log = @(if (Test-Path $LogFile) { Get-Content $LogFile -Encoding UTF8 })
+    $log = Log-Lines
     $last = if ($log.Count) { $log[-1] } else { "" }
     # an error message may run over several lines: the ERROR line is the one to show
     if ($script:proc.ExitCode -ne 0) { $err = @($log | Where-Object { $_ -match '^\S+ ERROR: ' }); Show-Error $(if ($err.Count) { $err[-1] } else { $last }) }
     else { Show-Info $last }
-  } elseif ($playing -and (Test-Path $LogFile)) {
+  } elseif ($playing) {
     $script:procSeen = $false
-    Show-Info (Get-Content $LogFile -Tail 1 -Encoding UTF8)
+    $log = Log-Lines; if ($log.Count) { Show-Info $log[-1] }   # a read that failed keeps the line shown
   }
   if ($script:updProc -and $script:updProc.HasExited) {
     if ($script:updProc.ExitCode -eq 0) {
       Start-Launcher
       $win.Close()
-    } else { Show-Error (Get-Content $LogFile -Tail 1 -Encoding UTF8); $script:updProc = $null }
+    } else { $log = Log-Lines; Show-Error $(if ($log.Count) { $log[-1] } else { "Обновление не удалось" }); $script:updProc = $null }
   }
   Read-Check
 }
