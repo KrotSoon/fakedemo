@@ -444,6 +444,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
         <DockPanel Margin="-6,8,-6,0">
           <Button x:Name="BtnUpdate" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Проверить обновления"/>
+          <Button x:Name="BtnReport" DockPanel.Dock="Right" Style="{StaticResource Link}" Content="Отчёт об ошибке" ToolTip="Журналы, версии и дампы вылета одним архивом на рабочий стол: его и присылай"/>
           <Button x:Name="BtnFolder" Style="{StaticResource Link}" Content="Папка записей" HorizontalAlignment="Left"/>
         </DockPanel>
       </StackPanel>
@@ -1467,7 +1468,10 @@ function Read-Check {
   if (-not (Test-Path $f)) {
     if ($script:checkProc) {
       $script:checkProc = $null
-      if ($script:checkAsked) { Show-Info "Не удалось проверить обновления: нет связи с GitHub"; $script:checkAsked = $false }
+      if ($script:checkAsked) {
+        $why = try { (Get-Content (Join-Path $Data "latest_error.txt") -Raw -Encoding UTF8).Trim() } catch { "" }
+        Show-Error "Не удалось проверить обновления: $(if ($why) { $why } else { 'нет связи с GitHub' })"; $script:checkAsked = $false
+      }
     }
     return
   }
@@ -1573,6 +1577,9 @@ foreach ($n in "TkNew", "TkStars", "TkAll", "TkTop", "TkNone", "TkGone") {
 (El "BtnOff").Add_Click({ try { Plugins-Off $script:s; Show-Info "Плагины сняты, CS2 чиста"; Refresh } catch { Show-Error $_.Exception.Message } })
 (El "BtnFolder").Add_Click({ New-Item -ItemType Directory -Force $Data | Out-Null; Start-Process explorer.exe $Data })
 (El "BtnUpdate").Add_Click({ try { Do-Update } catch { Show-Error $_.Exception.Message } })
+(El "BtnReport").Add_Click({
+  try { $zip = Make-Report $script:s; Show-Info "Отчёт: $zip — пришли этот файл"; Start-Process explorer.exe "/select,`"$zip`"" }
+  catch { Show-Error "Отчёт не собран: $($_.Exception.Message)" } })
 (El "BtnBinds").Add_Click({
   try { Install-Cfg $script:s; Show-Screen "main"; Show-Info "Конфиги и fd_unfake.cfg обновлены из твоих биндов" } catch { Show-Error $_.Exception.Message } })
 (El "BtnShortcut").Add_Click({

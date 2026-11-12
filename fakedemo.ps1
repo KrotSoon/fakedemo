@@ -950,12 +950,27 @@ function Dep-Newest($d) {
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   $wc = New-Object Net.WebClient; $wc.Headers.Add("User-Agent", "FakeDemo")
   $sha = $null
-  if ($d.latest -match '/releases/latest$') {
-    $rel = $wc.DownloadString($d.latest) | ConvertFrom-Json
-    $a = @($rel.assets | Where-Object { $_.name -like "$($d.asset)*.zip" })[0]
-    if (-not $a) { throw "no $($d.asset)*.zip in $($rel.tag_name)" }
-    $file = $a.name; $url = $a.browser_download_url
-    if ($a.digest -match '^sha256:([0-9a-f]{64})$') { $sha = $Matches[1].ToUpper() }
+  if ($d.latest -match '^https://api\.github\.com/repos/([^/]+/[^/]+)/releases/latest$') {
+    $repo = $Matches[1]
+    try {
+      $rel = $wc.DownloadString($d.latest) | ConvertFrom-Json
+      $a = @($rel.assets | Where-Object { $_.name -like "$($d.asset)*.zip" })[0]
+      if (-not $a) { throw "no $($d.asset)*.zip in $($rel.tag_name)" }
+      $file = $a.name; $url = $a.browser_download_url
+      if ($a.digest -match '^sha256:([0-9a-f]{64})$') { $sha = $Matches[1].ToUpper() }
+    } catch {
+      # the API refuses (403: 60 requests an hour per IP, shared behind a provider / VPN; a friend got it):
+      # the release page redirects to its tag without counting, and the asset name is the prefix + version
+      $api = $_.Exception.Message
+      $req = [Net.HttpWebRequest]::Create("https://github.com/$repo/releases/latest")
+      $req.Method = "HEAD"; $req.AllowAutoRedirect = $false; $req.UserAgent = "FakeDemo"
+      $resp = $req.GetResponse()
+      try { $loc = $resp.Headers["Location"] } finally { $resp.Close() }
+      if ($loc -notmatch '/releases/tag/(v?([\w.+-]+))$') { throw "GitHub API: $api; release page: no tag in '$loc'" }
+      $file = "$($d.asset)$($Matches[2]).zip"
+      $url = "https://github.com/$repo/releases/download/$($Matches[1])/$file"
+      Log "GitHub API refused ($api), the newest $($d.name) found through the release page"
+    }
   } else {
     $file = $wc.DownloadString($d.latest).Trim()
     $url = $d.latest.Substring(0, $d.latest.LastIndexOf('/') + 1) + $file
@@ -1124,6 +1139,15 @@ function Plugins-Off($s) {
     $clean = $text -replace "[ \t]*Game[ \t]+csgo/addons/metamod[^\r\n]*\r?\n", ""
     if ($clean -ne $text) { [IO.File]::WriteAllText($gi, $clean) }
     Unmount-Mods $s $gi
+  }
+  # CounterStrikeSharp's logs go with its folder: a copy stays for a bug report (Make-Report), two weeks
+  $cssLogs = Join-Path $csgo "addons\counterstrikesharp\logs"
+  if (Test-Path $cssLogs) {
+    try {
+      $keep = Join-Path $Data "logs"; New-Item -ItemType Directory -Force $keep | Out-Null
+      Copy-Item "$cssLogs\*" $keep -Force
+      Get-ChildItem $keep -File | Where-Object LastWriteTime -lt (Get-Date).AddDays(-14) | Remove-Item -Force
+    } catch { Log "WARNING CounterStrikeSharp logs not kept: $($_.Exception.Message)" }
   }
   Retry-Io { Remove-Plugins $csgo }
   # CS2 runs it on every map start in custom mode, and game_type stays 3 after a session without
@@ -1407,9 +1431,79 @@ function Status($s) {
 function Latest-Release {
   $repo = (Get-Content (Join-Path $Here "deps.json") -Raw | ConvertFrom-Json).repo
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  $r = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers @{ "User-Agent" = "FakeDemo" }
+  try {
+    $r = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers @{ "User-Agent" = "FakeDemo" }
+  } catch {
+    # API limit (403 behind a shared IP): the release page redirects to the tag, the zip name follows from it
+    $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+    if ($code -ne 403 -and $code -ne 429) { throw }
+    $req = [Net.HttpWebRequest]::Create("https://github.com/$repo/releases/latest")
+    $req.Method = "HEAD"; $req.AllowAutoRedirect = $false; $req.UserAgent = "FakeDemo"
+    $resp = $req.GetResponse()
+    try { $loc = $resp.Headers["Location"] } finally { $resp.Close() }
+    if ($loc -notmatch '/releases/tag/v([\d.]+)$') { throw }
+    $v = $Matches[1]
+    return [pscustomobject]@{ Version = $v; Url = "https://github.com/$repo/releases/download/v$v/FakeDemo-$v.zip"; Notes = "" }
+  }
   $asset = $r.assets | Where-Object { $_.name -like "FakeDemo-*.zip" -and $_.name -notlike "*-full.zip" } | Select-Object -First 1
   [pscustomobject]@{ Version = $r.tag_name.TrimStart("v"); Url = $asset.browser_download_url; Notes = $r.body }
+}
+
+# Everything needed to understand a failure on someone else's PC, as one zip on the desktop: the launcher's and
+# the game console's logs, CounterStrikeSharp's logs (kept by Plugins-Off), versions, the newest CS2 crash dumps.
+# settings.json goes without the netcon password. Returns the zip's path
+function Make-Report($s) {
+  $tmp = Join-Path $env:TEMP ("fakedemo-report-" + [guid]::NewGuid().ToString("n"))
+  New-Item -ItemType Directory -Force $tmp | Out-Null
+  try {
+    foreach ($f in "last.log", "netcon.log", "launcher-error.log", "latest_error.txt") {
+      $p = Join-Path $Data $f; if (Test-Path $p) { Copy-Item $p $tmp }
+    }
+    if (Test-Path $SettingsFile) {
+      $j = Get-Content $SettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+      if ($j.PSObject.Properties['NetconPassword']) { $j.NetconPassword = "" }
+      $j | ConvertTo-Json | Set-Content (Join-Path $tmp "settings.json") -Encoding UTF8
+    }
+    $logs = Join-Path $Data "logs"
+    if (Test-Path $logs) { Copy-Item $logs (Join-Path $tmp "css_logs") -Recurse }
+    $info = @("FakeDemo $Version", "Windows $([Environment]::OSVersion.Version)", "made $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
+    $acf = try { Join-Path (Split-Path (Split-Path $s.Cs2Path)) "appmanifest_730.acf" } catch { "" }
+    if ($acf -and (Test-Path $acf)) { $info += "CS2 " + ((Select-String -Path $acf -Pattern '"(buildid|LastUpdated)"' | ForEach-Object { $_.Line.Trim() -replace '\s+', ' ' }) -join ', ') }
+    $hl = try { Find-Hlae $s } catch { $null }
+    $info += if ($hl) { "HLAE $((Get-Item $hl).VersionInfo.FileVersion) at $hl" } else { "HLAE not found" }
+    $info += "settings: plugins=$($s.Plugins) hlae=$($s.Hlae) map=$($s.MapKind)/$($s.MapId) mods=$($s.Mods)"
+    foreach ($n in Get-ChildItem (Join-Path $Data "deps") -Filter "newest_*.txt" -ErrorAction SilentlyContinue) { $info += "$($n.Name): $((Get-Content $n.FullName -Raw).Trim()) ($($n.LastWriteTime))" }
+    # CS2's own small dumps (a few MB) from the last 3 days; the big Windows ones only by name
+    $bin = try { Join-Path $s.Cs2Path "game\bin\win64" } catch { "" }
+    if ($bin -and (Test-Path $bin)) {
+      $dumps = @(Get-ChildItem $bin -Filter "cs2_*.mdmp" | Where-Object LastWriteTime -gt (Get-Date).AddDays(-3) | Sort-Object LastWriteTime -Descending | Select-Object -First 3)
+      if ($dumps) { New-Item -ItemType Directory -Force (Join-Path $tmp "dumps") | Out-Null; $dumps | Copy-Item -Destination (Join-Path $tmp "dumps") }
+      $info += "crash dumps (3 days): $(@($dumps).Count)"
+    }
+    $info += @(Get-ChildItem (Join-Path $env:LOCALAPPDATA "CrashDumps") -Filter "cs2*.dmp" -ErrorAction SilentlyContinue | Where-Object LastWriteTime -gt (Get-Date).AddDays(-3) | ForEach-Object { "windows dump: $($_.Name) $($_.LastWriteTime) $([int]($_.Length / 1MB)) MB" })
+    Set-Content (Join-Path $tmp "info.txt") $info -Encoding UTF8
+    $zip = Join-Path ([Environment]::GetFolderPath("Desktop")) "FakeDemo-report-$(Get-Date -Format 'yyyyMMdd-HHmm').zip"
+    if (Test-Path $zip) { Remove-Item $zip }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::CreateFromDirectory($tmp, $zip, "Optimal", $false, [Text.Encoding]::UTF8)
+    $zip
+  } finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# why the release check failed, in words for the launcher
+function Check-Error($e) {
+  while ($e.InnerException -and $e -is [Management.Automation.MethodInvocationException]) { $e = $e.InnerException }
+  $code = try { [int]$e.Response.StatusCode } catch { 0 }
+  $we = $e -as [Net.WebException]
+  if ($code -eq 403 -or $code -eq 429) {
+    $reset = try { [DateTimeOffset]::FromUnixTimeSeconds([long]$e.Response.Headers["X-RateLimit-Reset"]).LocalDateTime.ToString("HH:mm") } catch { "" }
+    return "лимит GitHub: 60 запросов в час с одного IP (общий у провайдера или VPN)$(if ($reset) { ", снова можно в $reset" })"
+  }
+  if ($code -eq 407) { return "прокси просит пароль: лаунчер так не умеет" }
+  if ($we -and $we.Status -eq [Net.WebExceptionStatus]::NameResolutionFailure) { return "не найден api.github.com: нет интернета или DNS не отвечает" }
+  if ($we -and $we.Status -in [Net.WebExceptionStatus]::ConnectFailure, [Net.WebExceptionStatus]::Timeout) { return "GitHub не отвечает: провайдер, VPN или брандмауэр не пускают powershell.exe" }
+  if ($we -and $we.Status -in [Net.WebExceptionStatus]::SecureChannelFailure, [Net.WebExceptionStatus]::TrustFailure) { return "не удалось защищённое соединение с GitHub (антивирус проверяет HTTPS или прокси): $($e.Message)" }
+  $e.Message
 }
 
 function Update {
@@ -1453,8 +1547,15 @@ if ($MyInvocation.InvocationName -ne '.') {
       "status"    { Status $s | Format-List }
       "update"    { Update }
       "previews"  { Fetch-Previews $s }
+      "report"    { Log "report: $(Make-Report $s)" }
       # for the launcher: newest release into latest.json (no file = no answer)
-      "check"     { $r = Latest-Release; $r | ConvertTo-Json | Set-Content (Join-Path $Data "latest.json") -Encoding UTF8 }
+      "check"     {
+        # the reason goes to latest_error.txt: the launcher used to say "no connection" for any failure
+        $err = Join-Path $Data "latest_error.txt"
+        if (Test-Path $err) { Remove-Item $err }
+        try { $r = Latest-Release } catch { Set-Content $err (Check-Error $_.Exception) -Encoding UTF8; throw }
+        $r | ConvertTo-Json | Set-Content (Join-Path $Data "latest.json") -Encoding UTF8
+      }
       "uninstall" { Plugins-Off $s; foreach ($f in $CfgFiles) { $p = Join-Path (Csgo $s) "cfg\$f"; if (Test-Path $p) { Remove-Item $p } }; Log "FakeDemo removed from CS2 (your data stays in $Data)" }
       "migrate"   {
         if (-not $From) { throw "usage: fakedemo.ps1 migrate -From <old fakedemo folder>" }
