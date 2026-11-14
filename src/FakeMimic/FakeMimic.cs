@@ -212,6 +212,7 @@ public partial class FakeMimic : BasePlugin
         RegisterListener<Listeners.OnCustomHudClicked>(OnHudClicked);
         LoadMenuPrefs();
         LoadBotsPrefs();
+        LoadAutoBot();
         LoadCollidePrefs();
         LoadModels();
         InitSkins();
@@ -560,6 +561,7 @@ public partial class FakeMimic : BasePlugin
         _recName = null;
         EndOverwrite();
         if (again) Reload(name);
+        else AutoBot(name, rec.Team);
         return msg;
     }
 
@@ -609,18 +611,52 @@ public partial class FakeMimic : BasePlugin
         if (_menu != null) CloseMenu(p);
     }
 
-    // adds a bot of the team; the result arrives later through report
+    // adds a bot of the team; the result arrives later through report. One at a time: two at once both
+    // took the first new bot (the second movement then did not load on it)
+    readonly Queue<Action> _assignQueue = new();
+    bool _assigning;
+
     void Assign(string name, string team, Action<string> report)
+    {
+        _assignQueue.Enqueue(() => AssignNow(name, team, s => { report(s); _assigning = false; NextAssign(); }));
+        NextAssign();
+    }
+
+    void NextAssign()
+    {
+        if (_assigning || _assignQueue.Count == 0) return;
+        _assigning = true;
+        _assignQueue.Dequeue()();
+    }
+
+    // right after a map load the bot took longer than 0.5 s to come in ("bot was not added"): looked for up to 3 s
+    const float BotJoinStep = 0.25f;
+    const int BotJoinTries = 12;
+    const int BotQuotaWrapped = 64;   // the incrementvar max
+
+    void AssignNow(string name, string team, Action<string> report)
     {
         if (!File.Exists(PathOf(name))) { report($"no recording '{name}'"); return; }
         var rec = Recording.Load(PathOf(name));
         var before = FakeDemoPlayers.All().Where(p => p.IsBot).Select(p => p.Slot).ToHashSet();
-        // bot_add raises bot_quota by 2 in CS2 (see fd_actions.cfg), lower it back by 1
-        Server.ExecuteCommand($"bot_add_{team}; incrementvar bot_quota 0 64 -1");
-        AddTimer(0.5f, () =>
+        var plainBefore = FakeDemoPlayers.All().Count(p => p is { IsValid: true, IsBot: true, IsHLTV: false });
+        // bot_add raises bot_quota by 2 in CS2 (see fd_actions.cfg), lower it back by 1. bot_join_after_player:
+        // until the player picked a team (just after the map load) no bot came in ("bot was not added")
+        Server.ExecuteCommand($"bot_join_after_player 0; bot_add_{team}; incrementvar bot_quota 0 64 -1");
+        // in the map's first seconds bot_add lets the bot in without raising bot_quota: incrementvar wraps 0 -> 64
+        // and the game filled the map with bots (2026-11-14: 24). The quota is set to the bots plus this one
+        void Unwrap()
         {
+            if ((CounterStrikeSharp.API.Modules.Cvars.ConVar.Find("bot_quota")?.GetPrimitiveValue<int>() ?? 0) >= BotQuotaWrapped)
+                Server.ExecuteCommand($"bot_quota {plainBefore + 1}");
+        }
+        Server.NextFrame(Unwrap);
+        void Look(int tries)
+        {
+            Unwrap();
             var bot = FakeDemoPlayers.All().FirstOrDefault(p => p.IsBot && !p.IsHLTV && !before.Contains(p.Slot));
-            if (bot == null) { report("bot was not added"); return; }
+            if (bot == null && tries > 1) { AddTimer(BotJoinStep, () => Look(tries - 1)); return; }
+            if (bot == null) { Server.ExecuteCommand($"bot_quota {plainBefore}"); report("bot was not added"); return; }
             _bc?.Lock(bot.Slot, LockKind.All);   // stands still until fm_go
             // the movement had a bot (another model or team picked while it plays): that bot goes, or it
             // stayed on the map as a plain bot running around by itself
@@ -630,7 +666,8 @@ public partial class FakeMimic : BasePlugin
             _replays.RemoveAll(x => x.Name == name);
             _replays.Add(new Replay { Name = name, Rec = rec, Edits = EditsOf(name), Bot = bot });
             report($"{bot.PlayerName} ({team.ToUpper()}) plays '{name}'");
-        });
+        }
+        AddTimer(BotJoinStep, () => Look(BotJoinTries));
     }
 
     // Respawn every assigned bot, then (all bots in the same steps): model, weapons, replay start.
@@ -1679,7 +1716,8 @@ public partial class FakeMimic : BasePlugin
     {
         _recPage = page;
         var entries = Names().Select(n => new MenuItem(Describe(n), pl => RecordingMenu(pl, n))).ToList();
-        entries.Insert(0, new("Clear assignments", pl => { Say(pl, Clear()); RecordingsMenu(pl); }) { Divider = true });
+        entries.Insert(0, new("Clear assignments", pl => { Say(pl, Clear()); RecordingsMenu(pl); }));
+        entries.Insert(1, AutoBotRow());
         ShowPaged(p, RecordingsTitle, entries, page, RecordingsMenu, MainMenu);
     }
 
@@ -1848,8 +1886,8 @@ public partial class FakeMimic : BasePlugin
     public void CmdKickAll(CCSPlayerController? caller, CommandInfo cmd)
     {
         _replays.Clear();
-        foreach (var b in FakeDemoPlayers.All().Where(p => p is { IsValid: true, IsBot: true, IsHLTV: false }))
-            b.Disconnect(NetworkDisconnectionReason.NETWORK_DISCONNECT_KICKED);
+        // through Kick: it sets bot_quota too, a plain disconnect left the quota and the game added a new bot
+        Kick(FakeDemoPlayers.All().Where(p => p is { IsValid: true, IsBot: true, IsHLTV: false }).ToList());
     }
 
     [ConsoleCommand("fm_where", "fm_where - positions of all players (debug)")]

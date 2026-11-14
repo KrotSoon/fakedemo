@@ -1373,12 +1373,32 @@ function Start-Cs2($s, [string[]]$a) {
     "-hookDllPath", "`"$(Join-Path (Split-Path $hlae) 'x64\AfxHookSource2.dll')`"", "-programPath", "`"$cs2`"", "-cmdLine", "`"$($line -replace '"', '\"')`""
 }
 
+# CounterStrikeSharp knows where things are inside one CS2 build. On an older build (a friend's copy, 2026-11-14:
+# 25947352) its calls landed in the wrong place and the game crashed giving a mod weapon. The build FakeDemo was
+# last tested on: raise it at each release (Steam appmanifest_730.acf "buildid")
+$TestedCs2Build = 26598758
+
+function Cs2-Build($s) {
+  $acf = try { Join-Path (Split-Path (Split-Path $s.Cs2Path)) "appmanifest_730.acf" } catch { "" }
+  if (-not $acf -or -not (Test-Path $acf)) { return 0 }
+  $m = Select-String -Path $acf -Pattern '"buildid"\s+"(\d+)"' | Select-Object -First 1
+  if ($m) { [int64]$m.Matches[0].Groups[1].Value } else { 0 }
+}
+
+function Check-Cs2Build($s) {
+  $b = Cs2-Build $s
+  if ($b -and $b -lt $TestedCs2Build) {
+    Log "WARNING CS2 build $b is older than $TestedCs2Build that the plugins were tested on: the game may crash (update CS2 in Steam: Properties > Installed files > Verify)"
+  }
+}
+
 function Play($s) {
   Need-Closed
   # Steam may still be syncing the profile files of the last game
   Retry-Io { Restore-OwnKeys $s }   # before Build-Unfake reads them: a clean profile refreshes the clean copy
   Retry-Io { Install-Cfg $s }
   if ($s.Plugins) {
+    Check-Cs2Build $s
     # stopped half way (no CS2 profile, a download failed): what went in comes out, the game is not started
     # Only when something of ours went in (the manifest): without one Plugins-Off removes the old 0.5 install
     # paths, and that would take a Metamod that is not ours (the reason Plugins-On refused)
