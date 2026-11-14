@@ -13,7 +13,10 @@ namespace FakeMimic;
 
 public partial class FakeMimic
 {
-    record ModWeapon(string Category, string Name, string Title, string Base);
+    // Model: a model of the mod the subclass does not name itself (NewGuns' explosive rifle inherits the plain AUG in
+    // weapons.vdata; its weapon_rif_aug_he.vmdl is in the mod but set by the mod's server logic, which it lacks).
+    // Optional 5th field of a list line; precached with the map and set on the weapon after the subclass change
+    record ModWeapon(string Category, string Name, string Title, string Base, string Model = "");
 
     readonly List<ModWeapon> _modWeapons = new();
 
@@ -30,8 +33,11 @@ public partial class FakeMimic
                 if (line.StartsWith('#')) continue;
                 var parts = line.Split('|');
                 if (parts is ["sounds", var res]) { _modResources.Add(res.Trim()); continue; }
-                if (parts is not [var cat, var name, var title, var bas]) continue;
-                if (!_modWeapons.Any(w => w.Name == name.Trim())) _modWeapons.Add(new(cat.Trim(), name.Trim(), title.Trim(), bas.Trim()));
+                if (parts.Length is not (4 or 5)) continue;
+                var (cat, name, title, bas) = (parts[0].Trim(), parts[1].Trim(), parts[2].Trim(), parts[3].Trim());
+                var model = parts.Length > 4 ? parts[4].Trim() : "";
+                if (model != "") _modResources.Add(model);
+                if (!_modWeapons.Any(w => w.Name == name)) _modWeapons.Add(new(cat, name, title, bas, model));
             }
         if (_modResources.Count > 0)
             RegisterListener<Listeners.OnServerPrecacheResources>(m => { foreach (var r in _modResources) m.AddResource(r); });
@@ -82,6 +88,7 @@ public partial class FakeMimic
         // the skins leave it alone: they would turn the defibrillator back into the chosen knife
         _modGiven.Add(weapon.Index);
         weapon.AcceptInput("ChangeSubclass", value: w.Name);
+        SetModWeaponModel(weapon, w);
         _modOf[weapon.Index] = w;
         // recording a movement: the bot gets this one, not the class it is made on (it was given the plain negev
         // for the minigun: the recording only had the weapon's definition, the base class's)
@@ -137,8 +144,17 @@ public partial class FakeMimic
         var weapon = new CBasePlayerWeapon(given);
         _modGiven.Add(weapon.Index);
         weapon.AcceptInput("ChangeSubclass", value: sub);
-        _modOf[weapon.Index] = _modWeapons.FirstOrDefault(w => w.Name == sub) ?? new ModWeapon("", sub, sub, bas);
+        var mw = _modWeapons.FirstOrDefault(w => w.Name == sub) ?? new ModWeapon("", sub, sub, bas);
+        SetModWeaponModel(weapon, mw);
+        _modOf[weapon.Index] = mw;
         return given;
+    }
+
+    // after the subclass change has taken (it sets the vdata's model)
+    void SetModWeaponModel(CBasePlayerWeapon weapon, ModWeapon w)
+    {
+        if (w.Model == "") return;
+        Server.NextFrame(() => { if (weapon.IsValid) weapon.SetModel(w.Model); });
     }
 
     void ModWeaponsMenu(CCSPlayerController p)

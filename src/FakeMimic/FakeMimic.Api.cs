@@ -71,11 +71,13 @@ public partial class FakeMimic
 
         public void AddMainMenuItem(Func<string> text, Action<CCSPlayerController> pick) => AddMainMenuItem(() => new ApiMenuItem(text(), pick));
 
-        // a module hooked again (its hot reload) replaces its old row of the same title
+        // a module hooked again (its hot reload) replaces its old row of the same title. A row can fail to build
+        // before a map is loaded (Director counts the map's demos): then it is added as it is and kept; the throw
+        // used to break the module's whole hook (2026-11-14: no Director, its takes were not logged)
         public void AddMainMenuItem(Func<ApiMenuItem> row)
         {
-            var title = row().Text;
-            plugin._addonItems.RemoveAll(r => { try { return r().Text == title; } catch (Exception) { return true; } });
+            static string? TitleOf(Func<ApiMenuItem> r) { try { return r().Text; } catch (Exception) { return null; } }
+            if (TitleOf(row) is { } title) plugin._addonItems.RemoveAll(r => TitleOf(r) == title);
             plugin._addonItems.Add(row);
         }
 
