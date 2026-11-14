@@ -46,7 +46,8 @@ public class FakeDirector : BasePlugin
 
     public override void Load(bool hotReload)
     {
-        if (hotReload) AddTimer(0.5f, Hook);
+        // every 2 s: a hot reload of this plugin, or of FakeMimic alone, hooks into the new FakeMimic again
+        AddTimer(2f, Hook, CounterStrikeSharp.API.Modules.Timers.TimerFlags.REPEAT);
         RegisterListener<Listeners.OnMapStart>(_ => { _ghosts.Clear(); _preview = null; _folder = null; });
         // the preview is only for the player: GOTV and bots never get it
         RegisterListener<Listeners.CheckTransmit>(infos =>
@@ -109,6 +110,7 @@ public class FakeDirector : BasePlugin
 
     void OnTakeStopped(TakeInfo info)
     {
+        if (info.Cancelled) return;   // its demo is deleted
         var path = LogPath(info.Map, info.Folder);
         var takes = Load(path);
         takes.Add(new TakeRecord

@@ -1,4 +1,4 @@
-// FakeMimic features on top of record / replay:
+﻿// FakeMimic features on top of record / replay:
 //   takes      - one action starts every assigned bot and tv_record (<folder>_take<N>), one stops both
 //   timing     - shift a recording earlier / later without re-recording
 //   path       - draw a recording's route with beams (removed before a take: beams are entities and
@@ -152,6 +152,61 @@ public partial class FakeMimic
         Directory.CreateDirectory(FakeDemoPaths.Root);
         File.WriteAllText(CollidePrefsPath, on ? "on" : "off");
         if (!on) foreach (var r in _replays.Where(r => r.PausedAt >= 0)) Resume(r);
+    }
+
+    // God mode (T cycles it, a row in the main menu): Off - you can be killed; No death - hits land and show,
+    // your health never drops to 0 (buddha); Ghost - bullets fly through you: you take no damage, and your
+    // pawn stops interacting as a hit target (InteractsAs = 0). Said in chat: the console line was easy to miss
+    static readonly string[] GodNames = { "Off", "No death", "Ghost" };
+    int _god;
+    readonly Dictionary<uint, ulong> _ghostAs = new();   // pawn index -> its InteractsAs before Ghost
+
+    [ConsoleCommand("fm_god", "fm_god [0|1|2] - god mode: off / no death / ghost (no argument = next)")]
+    public void CmdGod(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        var p = caller ?? LocalHuman();
+        if (p == null) return;
+        SetGod(p, int.TryParse(cmd.ArgByIndex(1), out var m) ? Math.Clamp(m, 0, 2) : (_god + 1) % 3);
+    }
+
+    void SetGod(CCSPlayerController p, int mode)
+    {
+        _god = mode;
+        Server.ExecuteCommand(mode == 1 ? "buddha 1; buddha_ignore_bots 1; buddha_reset_hp 100" : "buddha 0");
+        ApplyGod(p);
+        Say(p, mode switch
+        {
+            1 => "god mode: NO DEATH - hits show, you never die",
+            2 => "god mode: GHOST - bullets fly through you",
+            _ => "god mode: OFF - you can be killed",
+        });
+    }
+
+    void ApplyGod(CCSPlayerController p)
+    {
+        if (p.PlayerPawn.Value is not { IsValid: true } pawn) return;
+        pawn.TakesDamage = _god != 2;
+        var attr = pawn.Collision.CollisionAttribute;
+        if (_god == 2 && !_ghostAs.ContainsKey(pawn.Index)) { _ghostAs[pawn.Index] = attr.InteractsAs; attr.InteractsAs = 0; }
+        else if (_god != 2 && _ghostAs.Remove(pawn.Index, out var was)) attr.InteractsAs = was;
+        else return;
+        Utilities.SetStateChanged(pawn, "CCollisionProperty", "m_collisionAttribute", CounterStrikeSharp.API.Modules.Memory.Schema.GetSchemaOffset("CBaseEntity", "m_Collision"));
+    }
+
+    [GameEventHandler]
+    public HookResult OnSpawnGod(EventPlayerSpawn ev, GameEventInfo info)
+    {
+        if (_god == 2 && ev.Userid is { IsValid: true, IsBot: false } p) Server.NextFrame(() => { if (p.IsValid) { _ghostAs.Clear(); ApplyGod(p); } });
+        return HookResult.Continue;
+    }
+
+    // Ghost check: a bullet that still reaches you is reported (the ghost trick is a guess about CS2's traces)
+    [GameEventHandler]
+    public HookResult OnHurtGod(EventPlayerHurt ev, GameEventInfo info)
+    {
+        if (_god == 2 && ev.Userid is { IsValid: true, IsBot: false })
+            Server.PrintToConsole($"[FM] ghost: hit anyway by {ev.Attacker?.PlayerName} ({ev.Weapon}, {ev.DmgHealth} hp)");
+        return HookResult.Continue;
     }
 
     [ConsoleCommand("fm_collisions", "fm_collisions <0|1> - bots stop in front of players instead of going through")]
@@ -423,6 +478,25 @@ public partial class FakeMimic
         return $"demo '{name}': bots and recording started. H > Stop demo (or DEL) to finish";
     }
 
+    // Cancel (F7, the menu) or the player died: the demo file is deleted once tv_stoprecord has closed it
+    string CancelTake(string why)
+    {
+        if (_take == null) return "no demo is recording";
+        var name = _take;
+        Server.ExecuteCommand("tv_stoprecord");
+        Halt();
+        FireTakeStopped(cancelled: true);
+        _take = null;
+        var file = Path.Combine(Path.GetFullPath(Path.Combine(Server.GameDirectory, "csgo")), name + ".dem");
+        void TryDelete(int left)
+        {
+            try { if (File.Exists(file)) File.Delete(file); }
+            catch (IOException) { if (left > 0) AddTimer(1f, () => TryDelete(left - 1)); }
+        }
+        AddTimer(1f, () => TryDelete(5));
+        return $"demo '{name}' {why}: deleted";
+    }
+
     string StopTake()
     {
         Server.ExecuteCommand("tv_stoprecord");
@@ -616,6 +690,12 @@ public partial class FakeMimic
     {
         var victim = ev.Userid;
         if (victim is not { IsValid: true }) return HookResult.Continue;
+        // the player died: what was being recorded is spoiled
+        if (!victim.IsBot && !victim.IsHLTV)
+        {
+            if (_recName != null && victim == _recPlayer) Say(victim, CancelRec("cancelled, you died"));
+            if (_take != null) Say(victim, CancelTake("cancelled, you died"));
+        }
         var r = _replays.FirstOrDefault(x => x.Bot == victim);
         if (r != null)
         {

@@ -135,8 +135,12 @@ body { font-family: Bahnschrift, "Segoe UI", sans-serif; display: inline-block; 
 .SubFirst.SubLast { border-radius: 14px; }
 
 /* ---- a name typed here (Enter sends it, Esc cancels) ---- */
-.Ask { margin: 0 6px 10px 0; }
-.Ask input { width: 100%; box-sizing: border-box; height: 40px; padding: 0 14px; border-radius: 14px; border: 2px solid #e4ae3970;
+.Ask { margin: 0 6px 10px 0; display: flex; gap: 8px; }
+/* a visible button too: a friend pressed the row under the field instead of Enter */
+.AskOk { flex: none; height: 40px; padding: 0 14px; border-radius: 14px; background: #e4ae39; color: #11141a;
+  display: grid; place-items: center; font-size: 15px; font-weight: bold; cursor: pointer; transition: transform .12s; }
+.AskOk:hover { transform: scale(1.05); }
+.Ask input { flex: 1; min-width: 0; box-sizing: border-box; height: 40px; padding: 0 14px; border-radius: 14px; border: 2px solid #e4ae3970;
   background: #00000055; color: #fff; font: inherit; font-size: 16px; outline: none; }
 .Ask input:focus { border-color: #e4ae39; }
 .Ask input::placeholder { color: #ffffff60; }
@@ -252,7 +256,9 @@ function render(m) {
       else if (e.key === "Escape") { send("text "); e.preventDefault(); }
     };
     f.onmousedown = () => send("focus");
-    a.append(f);
+    const ok = el("div", "AskOk", "OK ↵");
+    ok.onclick = () => send("text " + f.value);
+    a.append(f, ok);
     rows.prepend(a);
     send("focus");
     setTimeout(() => f.focus(), 50);

@@ -49,6 +49,7 @@ $KeyActions = @(
   @{ Cmd = "fm_menu";         Key = "h";         Group = "Меню и запись"; Text = "Меню FakeMimic (H-меню)";               Help = "FakeMimic menu (needs plugins)" }
   @{ Cmd = "fm_rectoggle";    Key = "n";         Group = "Меню и запись"; Text = "Записать мувмент / сохранить";          Help = "record a movement / stop and save it" }
   @{ Cmd = "fm_take";         Key = "F8";        Group = "Меню и запись"; Text = "Записать демку / остановить"; Help = "record a demo with the bots / stop it" }
+  @{ Cmd = "fm_cancel";       Key = "F7";        Group = "Меню и запись"; Text = "Отменить запись (не сохранять)";        Help = "cancel the movement / demo being recorded" }
   @{ Cmd = "fd_stoprec";      Key = "DEL";       Group = "Меню и запись"; Text = "Остановить запись демки"; Help = "stop recording the demo" }
   @{ Cmd = "fd_watchlast";    Key = "F9";        Group = "Меню и запись"; Text = "Смотреть последнюю демку папки";        Help = "watch the newest demo of the folder" }
   @{ Cmd = "fm_bots";         Key = "l";         Group = "Боты";          Text = "Боты с мувментами: старт / стоп";       Help = "assigned bots start / stop" }
@@ -66,11 +67,10 @@ $KeyActions = @(
   @{ Cmd = "fd_kit1";         Key = "F2";        Group = "Игрок";         Text = "Набор AK (+ пистолет, гранаты, броня)"; Help = "AK kit" }
   @{ Cmd = "fd_kit2";         Key = "F3";        Group = "Игрок";         Text = "Набор AWP (+ пистолет, гранаты, броня)"; Help = "AWP kit" }
   @{ Cmd = "+fd_noclip";      Key = "v";         Group = "Игрок";         Text = "Noclip (держать)";                      Help = "hold: noclip" }
-  @{ Cmd = "fd_buddha";       Key = "t";         Group = "Игрок";         Text = "Бессмертие вкл / выкл";                 Help = "buddha on / off (you never die)" }
+  @{ Cmd = "fd_god";          Key = "t";         Group = "Игрок";         Text = "God: выкл / без смерти / пули насквозь"; Help = "god mode: off / no death / ghost (needs plugins)" }
   @{ Cmd = "fd_clear";        Key = "x";         Group = "Игрок";         Text = "Убрать красные кресты попаданий";       Help = "clear red debug crosses" }
   @{ Cmd = "+fd_fast";        Key = "z";         Group = "Камера и время"; Text = "Скорость x10 (держать)";              Help = "hold: speed x10" }
-  @{ Cmd = "fd_speed_slow";   Key = "MOUSE5";    Group = "Камера и время"; Text = "Скорость x0.5";                       Help = "speed x0.5" }
-  @{ Cmd = "fd_speed_normal"; Key = "MOUSE4";    Group = "Камера и время"; Text = "Скорость x1";                         Help = "speed x1" }
+  @{ Cmd = "fd_slow";         Key = "MOUSE5";    Group = "Камера и время"; Text = "Замедление x0.5 / x1";                Help = "speed x0.5 / x1" }
   @{ Cmd = "fd_cam";          Key = "RSHIFT";    Group = "Камера и время"; Text = "Камера: сзади / лицо / от первого лица"; Help = "3rd person behind / face / 1st person" }
   @{ Cmd = "fd_maya";         Key = "ENTER";     Group = "Камера и время"; Text = "Maya-режим (мышь крутит модель)";     Help = "maya mode in 3rd person" }
 )
@@ -438,7 +438,7 @@ function Build-Unfake($s, [string]$target, [string[]]$touched = @()) {
     }
     foreach ($c in $touched | Sort-Object) { if ($saved.ContainsKey($c)) { $out += "$c `"$($saved[$c])`"" } }
   }
-  $out += "host_timescale 1", "firstperson; noclip 0; buddha 0; fov_cs_debug 0; r_drawviewmodel 1; cl_drawhud 1",
+  $out += "host_timescale 1", "firstperson; noclip 0; buddha 0; fm_god 0; fov_cs_debug 0; r_drawviewmodel 1; cl_drawhud 1",
           "game_type 0", "game_mode 0", "echo normal binds restored"
   Set-Content -Path $target -Value $out -Encoding ASCII
 }
@@ -448,7 +448,7 @@ function Build-Unfake($s, [string]$target, [string[]]$touched = @()) {
 # clean copy Build-Unfake keeps (unbound when the key had nothing); the file before is kept in backup\
 # a bound command of fake mode (fd_ fm_ fw_) or of V3 (mirv_ and its own aliases): left by a session
 # or a demo that ended without unfake / reset
-$SessionBindRx = '(^|[^a-z])[+-]?(fd_|fm_|fw_)|(^|[; ])mirv_|^\+v3shift$|^ac(_| |$)|^(recF[1-4]|playbackPause|campathPlayback|hideCampath|localMouseAxis|demoui|speed_(in|de)crease|resetkf|f3s|b3|blur|dof|hud|red|next_dof_state|prev_dof_state)(;|$)'
+$SessionBindRx = '(^|[^a-z])[+-]?(fd_|fm_|fw_)|(^|[; ])mirv_|^\+v3shift$|^ac(_| |$)|^\+?(recF[1-4]|playback[A-Za-z]+|campathPlayback|hideCampath|localMouseAxis|demoui|speed_(in|de)crease|resetkf|f3s|b3|blur|dof|hud|red|next_dof_state|prev_dof_state)(;|$)'
 # only fake mode's own commands: nobody binds these outside FakeDemo. The V3 / mirv_ ones may be your own
 # (HLAE in normal play): they go back only to what the clean copy has, never to unbound
 $FakeBindRx = '(^|[^a-z])[+-]?(fd_|fm_|fw_)'
@@ -1466,6 +1466,9 @@ function Make-Report($s) {
     }
     $logs = Join-Path $Data "logs"
     if (Test-Path $logs) { Copy-Item $logs (Join-Path $tmp "css_logs") -Recurse }
+    # left by tools\perfwatch.ps1 (development only, not in the release)
+    $perf = Join-Path $Data "perf"
+    if (Test-Path $perf) { Copy-Item $perf (Join-Path $tmp "perf") -Recurse }
     $info = @("FakeDemo $Version", "Windows $([Environment]::OSVersion.Version)", "made $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
     $acf = try { Join-Path (Split-Path (Split-Path $s.Cs2Path)) "appmanifest_730.acf" } catch { "" }
     if ($acf -and (Test-Path $acf)) { $info += "CS2 " + ((Select-String -Path $acf -Pattern '"(buildid|LastUpdated)"' | ForEach-Object { $_.Line.Trim() -replace '\s+', ' ' }) -join ', ') }

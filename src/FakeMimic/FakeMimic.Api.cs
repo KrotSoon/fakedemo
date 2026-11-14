@@ -1,4 +1,4 @@
-// "fakemimic:api" for add-on plugins (FakeDirector, ...): main-menu entries, the in-game menu,
+﻿// "fakemimic:api" for add-on plugins (FakeDirector, ...): main-menu entries, the in-game menu,
 // chat lines and take events. Add-ons stay separate plugins; FakeMimic only knows this contract.
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Capabilities;
@@ -41,10 +41,10 @@ public partial class FakeMimic
         _api?.RaiseStarted(_takeInfo);
     }
 
-    void FireTakeStopped()
+    void FireTakeStopped(bool cancelled = false)
     {
         if (_takeInfo == null) return;
-        var info = _takeInfo with { Stopped = DateTime.Now };
+        var info = _takeInfo with { Stopped = DateTime.Now, Cancelled = cancelled };
         _takeInfo = null;
         _api?.RaiseStopped(info);
     }
@@ -71,7 +71,13 @@ public partial class FakeMimic
 
         public void AddMainMenuItem(Func<string> text, Action<CCSPlayerController> pick) => AddMainMenuItem(() => new ApiMenuItem(text(), pick));
 
-        public void AddMainMenuItem(Func<ApiMenuItem> row) => plugin._addonItems.Add(row);
+        // a module hooked again (its hot reload) replaces its old row of the same title
+        public void AddMainMenuItem(Func<ApiMenuItem> row)
+        {
+            var title = row().Text;
+            plugin._addonItems.RemoveAll(r => { try { return r().Text == title; } catch (Exception) { return true; } });
+            plugin._addonItems.Add(row);
+        }
 
         public void ShowMenu(CCSPlayerController player, string title, IReadOnlyList<ApiMenuItem> items) =>
             plugin.Show(player, new Menu(title, Rows(items)));

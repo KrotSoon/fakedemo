@@ -17,6 +17,111 @@ public static class FakeDemoPaths
 
     /// takes/<map>/<folder>/takes.json (FakeDirector)
     public static string Takes => Path.Combine(Root, "takes");
+
+    /// perf/<plugin>.csv, marks.txt (F6), the launcher's system.csv and lag_*.txt
+    public static string Perf => Path.Combine(Root, "perf");
+}
+
+/// Named pieces of work that took SpikeMs or more, one line each in perf/spikes.csv (time, plugin, what, ms):
+/// the launcher's lag check (F6) names them, so a stutter points at the piece of code behind it.
+public static class PerfSpikes
+{
+    public const double SpikeMs = 4;
+
+    // only while tools\perfwatch.ps1 runs (it keeps perf/on): a release does no timing at all. Looked at every 2 s
+    static long _checkedAt = -1;
+    static bool _on;
+    public static bool Enabled
+    {
+        get
+        {
+            var now = Environment.TickCount64;
+            if (_checkedAt < 0 || now - _checkedAt > 2000)
+            {
+                _checkedAt = now;
+                try { _on = File.Exists(Path.Combine(FakeDemoPaths.Perf, "on")); } catch (Exception) { _on = false; }
+            }
+            return _on;
+        }
+    }
+
+    public static void Time(string plugin, string what, Action work)
+    {
+        if (!Enabled) { work(); return; }
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try { work(); }
+        finally { Note(plugin, what, sw.Elapsed.TotalMilliseconds); }
+    }
+
+    public static void Note(string plugin, string what, double ms)
+    {
+        if (ms < SpikeMs || !Enabled) return;
+        try
+        {
+            var path = Path.Combine(FakeDemoPaths.Perf, "spikes.csv");
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            File.AppendAllText(path, string.Format(c, "{0:HH:mm:ss.fff},{1},{2},{3:0.0}\n", DateTime.Now, plugin, what.Replace(',', ' '), ms));
+        }
+        catch (Exception) { }
+    }
+}
+
+/// A plugin's tick work, one CSV line a second, for the launcher's lag check (F6): how long the plugin
+/// took per tick (average, most), how many ticks, how many came late (the gap since the previous tick over
+/// SlowGapMs: the server did not keep up) and the plugin's own counts (Extra). Started anew each load.
+public sealed class PerfLog
+{
+    const double SlowGapMs = 23;   // a 64-tick server ticks every 15.6 ms
+    readonly string _path;
+    readonly System.Diagnostics.Stopwatch _work = new(), _gap = new();
+    readonly Func<string> _extra;
+    double _sum, _max, _gapMax;
+    int _ticks, _slow;
+    long _second = -1;
+
+    readonly string _header;
+    bool _started;
+
+    public PerfLog(string name, string extraHeader, Func<string> extra)
+    {
+        _extra = extra;
+        _path = Path.Combine(FakeDemoPaths.Perf, name + ".csv");
+        _header = "time,ms_avg,ms_max,ticks,slow_ticks,gap_max_ms," + extraHeader + "\n";
+    }
+
+    public void Begin()
+    {
+        if (!PerfSpikes.Enabled) { _started = false; _gap.Reset(); return; }
+        if (!_started)
+        {
+            _started = true;   // a new file each time perfwatch turns timing on
+            try { Directory.CreateDirectory(FakeDemoPaths.Perf); File.WriteAllText(_path, _header); } catch (Exception) { }
+        }
+        if (_gap.IsRunning)
+        {
+            var g = _gap.Elapsed.TotalMilliseconds;
+            if (g > SlowGapMs) _slow++;
+            _gapMax = Math.Max(_gapMax, g);
+        }
+        _gap.Restart();
+        _work.Restart();
+    }
+
+    public void End()
+    {
+        if (!_started) return;
+        var ms = _work.Elapsed.TotalMilliseconds;
+        (_sum, _max, _ticks) = (_sum + ms, Math.Max(_max, ms), _ticks + 1);
+        var now = DateTime.Now;
+        var sec = now.Ticks / TimeSpan.TicksPerSecond;
+        if (_second < 0) _second = sec;
+        if (sec == _second) return;
+        _second = sec;
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        var line = string.Format(c, "{0:HH:mm:ss},{1:0.00},{2:0.00},{3},{4},{5:0},{6}\n", now, _sum / Math.Max(1, _ticks), _max, _ticks, _slow, _gapMax, _extra());
+        (_sum, _max, _ticks, _slow, _gapMax) = (0, 0, 0, 0, 0);
+        try { File.AppendAllText(_path, line); } catch (Exception) { }
+    }
 }
 
 /// Every connected player controller. Use this, not Utilities.GetPlayers: that one only looks at the first
@@ -66,7 +171,8 @@ public record ApiCard(string Model, int Team, string Title, string Subtitle);
 
 public enum ApiTone { None, Good, Ok, Bad, Gold }
 
-public record TakeInfo(string Demo, string Map, string Folder, DateTime Started, DateTime? Stopped, IReadOnlyList<TakeBot> Bots);
+/// Cancelled: stopped with Cancel (or the player died), its demo file is deleted: keep no record of it.
+public record TakeInfo(string Demo, string Map, string Folder, DateTime Started, DateTime? Stopped, IReadOnlyList<TakeBot> Bots, bool Cancelled = false);
 
 /// Stars: a rating, Options are the stars (up to 5), the ones up to Selected are lit; a click calls Choose.
 public enum ApiRowKind { Button, Toggle, BigToggle, Choice, Colors, Primary, Info, Cards, Stars }
@@ -121,7 +227,7 @@ public interface IFakeMimicApi
     const string Capability = "fakemimic:api";
 
     /// Bumped on every change of this contract; add-ons compare it with the one they were built with.
-    const int CurrentVersion = 7;
+    const int CurrentVersion = 8;
 
     /// CurrentVersion of the FakeMimic that is loaded.
     int Version { get; }

@@ -1,4 +1,4 @@
-// FakeWallhack: bots seen through walls and the paths of their movements, for practising a move and for
+﻿// FakeWallhack: bots seen through walls and the paths of their movements, for practising a move and for
 // recording over running bots. Every bot gets a glowing copy of its model that follows it through a hidden
 // relay prop, and is kept "spotted" so the radar shows it; paths are beams along the recorded route.
 // Only the human player is sent the copies and beams: GOTV never gets them, so demos show ordinary bots.
@@ -43,8 +43,10 @@ public class FakeWallhack : BasePlugin
     static readonly (int T, int CT)[] Palettes =
     {
         (ApiColors.Orange, ApiColors.Blue), (ApiColors.Red, ApiColors.Teal),
-        (ApiColors.Yellow, ApiColors.Green), (ApiColors.White, ApiColors.White),
+        (ApiColors.Yellow, ApiColors.Green), (ApiColors.White, ApiColors.White), (ApiColors.Violet, ApiColors.Green),
     };
+    // the last swatch is not a team pair: every bot glows in its own colour, the one of its path (Each bot)
+    const int EachBotPalette = 4;
 
     readonly Dictionary<int, Glow> _glows = new();   // by bot slot
     readonly List<CBeam> _beams = new();
@@ -56,7 +58,7 @@ public class FakeWallhack : BasePlugin
 
     // settings
     bool _autoOn = true, _radar = true, _paths, _more, _progress;
-    int _who, _range, _palette, _pathColor = 1, _width = 1, _style;
+    int _who, _range, _palette, _pathColor = 1, _width = 1, _style, _span;
 
     bool Wanted => _manual || (_autoOn && _auto > 0);
 
@@ -68,9 +70,10 @@ public class FakeWallhack : BasePlugin
         {
             var p = File.ReadAllText(SettingsPath).Split(' ').Select(int.Parse).ToArray();
             (_autoOn, _radar, _paths, _more) = (p[0] != 0, p[1] != 0, p[2] != 0, p[3] != 0);
-            (_who, _range, _palette) = (Math.Clamp(p[4], 0, 3), Math.Clamp(p[5], 0, 3), Math.Clamp(p[6], 0, 3));
+            (_who, _range, _palette) = (Math.Clamp(p[4], 0, 3), Math.Clamp(p[5], 0, 3), Math.Clamp(p[6], 0, Palettes.Length - 1));
             if (p.Length < 11) return;   // older file: path settings at defaults
             (_pathColor, _width, _style, _progress) = (Math.Clamp(p[7], 0, 1), Math.Clamp(p[8], 0, 2), Math.Clamp(p[9], 0, 2), p[10] != 0);
+            if (p.Length > 11) _span = Math.Clamp(p[11], 0, 2);
         }
         catch (Exception) { /* no file: defaults */ }
     }
@@ -79,21 +82,29 @@ public class FakeWallhack : BasePlugin
     {
         Directory.CreateDirectory(FakeDemoPaths.Root);
         int B(bool v) => v ? 1 : 0;
-        File.WriteAllText(SettingsPath, $"{B(_autoOn)} {B(_radar)} {B(_paths)} {B(_more)} {_who} {_range} {_palette} {_pathColor} {_width} {_style} {B(_progress)}");
+        File.WriteAllText(SettingsPath, $"{B(_autoOn)} {B(_radar)} {B(_paths)} {B(_more)} {_who} {_range} {_palette} {_pathColor} {_width} {_style} {B(_progress)} {_span}");
     }
 
     public override void Load(bool hotReload)
     {
         LoadSettings();
-        if (hotReload) AddTimer(0.5f, Hook);
+        // a hot reload: the old instance's path beams stayed in the world (its Unload did not take them),
+        // so every beam goes (also another plugin's short-lived route preview: development only)
+        if (hotReload) Server.NextFrame(() => { foreach (var b in Utilities.FindAllEntitiesByDesignerName<CBeam>("beam")) b.Remove(); _beamsKey = ""; });
+        // every 2 s: a hot reload of this plugin, or of FakeMimic alone, hooks into the new FakeMimic again
+        AddTimer(2f, Hook, CounterStrikeSharp.API.Modules.Timers.TimerFlags.REPEAT);
         RegisterListener<Listeners.OnMapStart>(_ => { _glows.Clear(); _beams.Clear(); _drawn.Clear(); _beamsKey = ""; _auto = 0; });
+        var perf = new PerfLog("wh", "beams,glows", () => $"{_beams.Count},{_glows.Count}");
         RegisterListener<Listeners.OnTick>(() =>
         {
-            if (++_tick % 8 == 0) Sync();
-            if (_tick % 32 == 0) SyncPaths();
-            if (_tick % 2 == 0) Progress();
-            if (_tick % 2 == 0) Fade();
-            Spot();
+            perf.Begin();
+            if (++_tick % 8 == 0) PerfSpikes.Time("wh", "outlines", Sync);
+            if (_tick % 32 == 0) PerfSpikes.Time("wh", "paths", SyncPaths);
+            if (_tick % 2 == 0) PerfSpikes.Time("wh", "path progress", Progress);
+            if (_tick % 2 == 0) PerfSpikes.Time("wh", "outline fade", Fade);
+            PerfSpikes.Time("wh", "radar", Spot);
+            if (_pending.Count > 0) PerfSpikes.Time("wh", "path beams", DrawPending);
+            perf.End();
         });
         RegisterListener<Listeners.CheckTransmit>(infos =>
         {
@@ -160,6 +171,7 @@ public class FakeWallhack : BasePlugin
                 new("Colors T / CT", _ => { })
                 {
                     Kind = ApiRowKind.Colors, Swatches = Palettes.Select(c => (c.T, c.CT)).ToList(), Selected = _palette,
+                    Value = _palette == EachBotPalette ? "each bot" : "",
                     Choose = (pl, i) => Set(pl, () => _palette = i), Nested = true,
                 },
                 new("Show on radar", pl => Set(pl, () => _radar = !_radar)) { Kind = ApiRowKind.Toggle, On = _radar, Nested = true },
@@ -170,7 +182,7 @@ public class FakeWallhack : BasePlugin
 
     // the HUD localizes words that are game tokens ("Normal", "Style"), so other words are used
     static readonly string[] PathColorNames = { "By team", "Each bot" }, WidthNames = { "Thin", "Mid", "Thick" },
-        StyleNames = { "Line", "Dashed", "Electric" };
+        StyleNames = { "Line", "Dashed", "Smooth" }, SpanNames = { "Short", "Mid", "Long" };
     static readonly float[] Widths = { 1.2f, 2.5f, 5f };
 
     void PathsScreen(CCSPlayerController p)
@@ -185,6 +197,7 @@ public class FakeWallhack : BasePlugin
             new("Line look", _ => { }) { Kind = ApiRowKind.Choice, Options = StyleNames, Selected = _style, Choose = (pl, i) => Set(pl, () => _style = i) },
             // as HLAE's campath, in the bot's own colour: bright at the bot, darker further away in time
             new("Progress: bright at the bot", pl => Set(pl, () => _progress = !_progress)) { Kind = ApiRowKind.Toggle, On = _progress, Divider = true },
+            new("Progress length", _ => { }) { Kind = ApiRowKind.Choice, Options = SpanNames, Selected = _span, Choose = (pl, i) => Set(pl, () => _span = i) },
         };
         _fm.ShowMenu(p, "Paths", rows, Screen);
     }
@@ -195,7 +208,19 @@ public class FakeWallhack : BasePlugin
     static CCSPlayerController? Human() =>
         FakeDemoPlayers.All().FirstOrDefault(p => p is { IsValid: true, IsBot: false, IsHLTV: false });
 
-    Color TeamColor(int team) => ApiColors.Rgb[team == 3 ? Palettes[_palette].CT : Palettes[_palette].T];
+    Color TeamColor(int team)
+    {
+        var pal = Palettes[_palette == EachBotPalette ? 0 : _palette];
+        return ApiColors.Rgb[team == 3 ? pal.CT : pal.T];
+    }
+
+    // the bot's place among the bots by slot: its outline (last swatch) and its path (Each bot) share a colour
+    Color EachColor(CCSPlayerController bot)
+    {
+        var n = FakeDemoPlayers.All().Where(p => p is { IsValid: true, IsBot: true, IsHLTV: false }).Select(p => p.Slot)
+            .OrderBy(x => x).ToList().IndexOf(bot.Slot);
+        return ApiColors.Rgb[BotColors[Math.Max(0, n) % BotColors.Length]];
+    }
 
     HashSet<int> Recorded() => _fm?.Replays.Select(r => r.BotSlot).ToHashSet() ?? new();
 
@@ -224,7 +249,7 @@ public class FakeWallhack : BasePlugin
                 var model = pawn.CBodyComponent?.SceneNode?.GetSkeletonInstance().ModelState.ModelName ?? "";
                 if (model.Length == 0) continue;
                 keep.Add(bot.Slot);
-                var color = TeamColor(bot.TeamNum);
+                var color = _palette == EachBotPalette ? EachColor(bot) : TeamColor(bot.TeamNum);
                 if (_glows.TryGetValue(bot.Slot, out var g) && g.Pawn.IsValid && g.Pawn.Index == pawn.Index && g.Model == model
                     && g.Color == color && g.Copy.IsValid && g.Relay.IsValid) continue;
                 Remove(bot.Slot);
@@ -331,7 +356,9 @@ public class FakeWallhack : BasePlugin
     // Progress: the path keeps the bot's colour; bright at the bot (a whitish head on the piece it is on),
     // darker the further away in time: ahead over ProgressSpan of the movement, behind twice as fast
     // beams add light, so a darker colour is fainter: MaxDim keeps the far part visible (35 % bright)
-    const float ProgressSpan = 0.6f, MinSpanTicks = 128, MaxDim = 0.65f;
+    // Progress length (Short / Mid / Long): the part of the movement ahead that fades, and its least ticks
+    static readonly float[] ProgressSpan = { 0.15f, 0.3f, 0.6f }, MinSpanTicks = { 32, 64, 128 };
+    const float MaxDim = 0.65f;
     const int ProgressSteps = 20;
 
     // a drawn path: its beams with the ticks each spans, where the bot is in it
@@ -359,30 +386,104 @@ public class FakeWallhack : BasePlugin
                     shown.Add(r);
         }
         var key = string.Join("|", shown.Select(r => $"{r.Name}:{r.BotSlot}:{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(r.Path)}"))
-            + $"#{_palette}{_pathColor}{_width}{_style}";
+            + $"#{_palette}{_pathColor}{_width}{_style}#"
+            + string.Join(",", FakeDemoPlayers.All().Where(p => p is { IsValid: true, IsBot: true }).Select(p => p.Slot));   // a bot joined: colours move
         if (key == _beamsKey) return;
         _beamsKey = key;
         ClearBeams();
-        for (var n = 0; n < shown.Count; n++)
+        foreach (var r in shown)
         {
-            var r = shown[n];
-            // every tick of the movement as it plays now (edits applied); the coarse Path if it is gone
-            var pts = _fm!.Route(_fm.Folder, r.Name)?.Frames.Select(f => f.Pos).ToList() ?? r.Path.ToList();
-            var d = new Drawn { R = r, Color = _pathColor == 1 ? ApiColors.Rgb[BotColors[n % BotColors.Length]] : TeamColor(r.Team), Ticks = pts.Count };
-            var keep = Thin(pts);
+            var g = Geometry(r);
+            var d = new Drawn { R = r, Color = _pathColor == 1 && Utilities.GetPlayerFromSlot(r.BotSlot) is { IsValid: true } owner ? EachColor(owner) : TeamColor(r.Team), Ticks = g.Ticks };
+            foreach (var piece in g.Pieces) _pending.Enqueue((d, piece.A, piece.B, piece.From, piece.To));
+            // the start stands out: a gold post where the bot begins
+            Beam(g.Start, g.Start with { Z = g.Start.Z + 72 }, Color.FromArgb(255, 228, 174, 57));
+            _drawn.Add(d);
+        }
+        Progress();
+    }
+
+    // Every loop start the game drops all beams (FakeMimic's map reset) and the paths are drawn again: reading
+    // the recordings, thinning, smoothing and making every beam in one tick took up to 174 ms. Now a path's
+    // pieces are worked out once (until its edits or the line look change) and the beams are made
+    // BeamsPerTick a tick
+    const int BeamsPerTick = 40;
+    record PathGeometry(List<(System.Numerics.Vector3 A, System.Numerics.Vector3 B, int From, int To)> Pieces, System.Numerics.Vector3 Start, int Ticks);
+    readonly Dictionary<string, PathGeometry> _geometry = new();
+    readonly Queue<(Drawn D, System.Numerics.Vector3 A, System.Numerics.Vector3 B, int From, int To)> _pending = new();
+
+    PathGeometry Geometry(ApiReplay r)
+    {
+        var key = $"{r.Name}:{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(r.Path)}:{_style}";
+        if (_geometry.TryGetValue(key, out var known)) return known;
+        if (_geometry.Count > 64) _geometry.Clear();
+        // every tick of the movement as it plays now (edits applied); the coarse Path if it is gone
+        var pts = _fm!.Route(_fm.Folder, r.Name)?.Frames.Select(f => f.Pos).ToList() ?? r.Path.ToList();
+        var keep = Thin(pts);
+        var pieces = new List<(System.Numerics.Vector3, System.Numerics.Vector3, int, int)>();
+        if (_style == 2)
+        {
+            var poly = SmoothPath(pts, keep);
+            for (var i = 1; i < poly.Count; i++) pieces.Add((poly[i - 1].Pos, poly[i].Pos, (int)poly[i - 1].Tick, (int)MathF.Ceiling(poly[i].Tick)));
+        }
+        else
             for (var i = 1; i < keep.Count; i++)
             {
                 var (from, to) = (keep[i - 1], keep[i]);
                 var (a, b) = (pts[from], pts[to]);
                 if (_style == 1) b = a + (b - a) * 0.55f;   // dashed: the first half of each piece
-                if (Beam(a, b, d.Color) is { } beam) { d.Segments.Add((beam, from, to)); d.Shown.Add(d.Color); }
+                pieces.Add((a, b, from, to));
             }
-            // the start stands out: a gold post where the bot begins
-            var start = pts[0];
-            Beam(start, start with { Z = start.Z + 72 }, Color.FromArgb(255, 228, 174, 57));
-            _drawn.Add(d);
+        return _geometry[key] = new PathGeometry(pieces, pts[0], pts.Count);
+    }
+
+    void DrawPending()
+    {
+        for (var n = 0; n < BeamsPerTick && _pending.Count > 0; n++)
+        {
+            var (d, a, b, from, to) = _pending.Dequeue();
+            if (!_drawn.Contains(d)) continue;   // cleared meanwhile
+            if (Beam(a, b, d.Color) is { } beam) { d.Segments.Add((beam, from, to)); d.Shown.Add(d.Color); }
         }
-        Progress();
+    }
+
+    // Smooth: the kept points with their corners cut (Chaikin: every piece gives way to points at 1/4 and 3/4
+    // of it), up to SmoothPasses times while the path stays within SmoothBudget beams. A curve through the
+    // points themselves kept a sharp turn sharp. Each point carries its tick for Progress
+    const int SmoothPasses = 4, SmoothBudget = 480;
+
+    static List<(System.Numerics.Vector3 Pos, float Tick)> SmoothPath(IReadOnlyList<System.Numerics.Vector3> pts, List<int> keep)
+    {
+        var poly = keep.Select(k => (pts[k], (float)k)).ToList();
+        for (var pass = 0; pass < SmoothPasses && poly.Count > 2 && (poly.Count - 1) * 2 <= SmoothBudget; pass++)
+        {
+            var next = new List<(System.Numerics.Vector3, float)>(poly.Count * 2) { poly[0] };
+            for (var i = 1; i < poly.Count; i++)
+            {
+                var (a, ta) = poly[i - 1]; var (b, tb) = poly[i];
+                next.Add((a * 0.75f + b * 0.25f, ta * 0.75f + tb * 0.25f));
+                next.Add((a * 0.25f + b * 0.75f, ta * 0.25f + tb * 0.75f));
+            }
+            next.Add(poly[^1]);
+            poly = Merge(next);
+        }
+        return poly;
+    }
+
+    // points where the path hardly turns (under ~1.8 degrees) are dropped: straight runs cost no beams,
+    // so the corners get the passes
+    static List<(System.Numerics.Vector3 Pos, float Tick)> Merge(List<(System.Numerics.Vector3 Pos, float Tick)> poly)
+    {
+        var list = new List<(System.Numerics.Vector3 Pos, float Tick)> { poly[0] };
+        for (var i = 1; i < poly.Count - 1; i++)
+        {
+            var u = poly[i].Pos - list[^1].Pos; var v = poly[i + 1].Pos - poly[i].Pos;
+            if (u.LengthSquared() < 1e-4f) continue;
+            if (v.LengthSquared() > 1e-4f && System.Numerics.Vector3.Dot(System.Numerics.Vector3.Normalize(u), System.Numerics.Vector3.Normalize(v)) > 0.9995f) continue;
+            list.Add(poly[i]);
+        }
+        list.Add(poly[^1]);
+        return list;
     }
 
     // the indices of the points to keep: Douglas-Peucker with Tolerance, raised until the path fits its beams
@@ -429,7 +530,7 @@ public class FakeWallhack : BasePlugin
         foreach (var d in _drawn)
         {
             var now = _progress && _fm != null ? _fm.ReplayTick(d.R.BotSlot) : -1;
-            var span = Math.Max(MinSpanTicks, d.Ticks * ProgressSpan);
+            var span = Math.Max(MinSpanTicks[_span], d.Ticks * ProgressSpan[_span]);
             for (var k = 0; k < d.Segments.Count; k++)
             {
                 var (beam, from, to) = d.Segments[k];
@@ -457,7 +558,6 @@ public class FakeWallhack : BasePlugin
         if (beam == null) return null;
         beam.Render = color;
         beam.Width = Widths[_width];
-        if (_style == 2) beam.Amplitude = 1.5f;   // electric: the beam jitters
         beam.Teleport(new Vector(a.X, a.Y, a.Z + 4), new QAngle(0, 0, 0), new Vector(0, 0, 0));
         beam.EndPos.X = b.X;
         beam.EndPos.Y = b.Y;
@@ -469,6 +569,7 @@ public class FakeWallhack : BasePlugin
 
     void ClearBeams()
     {
+        _pending.Clear();
         foreach (var b in _beams.Where(b => b.IsValid)) b.Remove();
         _beams.Clear();
         _drawn.Clear();

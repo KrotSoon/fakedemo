@@ -1,4 +1,4 @@
-// Skins: weapon paints, knives, gloves (and the agent for the player; bots have theirs in "Play on a bot"),
+﻿// Skins: weapon paints, knives, gloves (and the agent for the player; bots have theirs in "Play on a bot"),
 // inside the fake session only (-insecure). The player's choice is Documents\FakeDemo\skins_you.txt, a bot's is
 // in the recording's .fme (skins=...), like its model.
 // How CS2 takes them (the method of cs2-WeaponPaints, written anew here): the item gets an own item id, the paint
@@ -477,7 +477,7 @@ public partial class FakeMimic
         {
             var carried = GunsCarried(p);
             foreach (var gun in carried)
-                items.Add(new($"{gun.Name} ›", pl => GunPaintsMenu(pl, rec, gun, 0, inHand: true)) { Value = GunValue(set, gun) });
+                items.Add(new($"{gun.Name} ›", pl => GunMenu(pl, rec, gun, inHand: true)) { Value = GunValue(set, gun) });
             if (carried.Count == 0)
                 items.Add(new("No guns on you", pl => Say(pl, "pick up or buy a gun and open Skins again; or All weapons")) { Faded = true });
         }
@@ -485,11 +485,11 @@ public partial class FakeMimic
         {
             Value = set.Guns.Count > 0 ? $"{set.Guns.Count} set" : "", Divider = rec == null,
         });
-        items.Add(new("Knife ›", pl => KnivesMenu(pl, rec, 0)) { Value = set.Knife == 0 ? "default" : KnifeName(set) });
-        items.Add(new("Gloves ›", pl => GlovesMenu(pl, rec)) { Value = set.Gloves == 0 ? "default" : GlovesName(set) });
+        items.Add(new("Knife ›", pl => KnifeMenu(pl, rec)) { Value = set.Knife == 0 ? "default" : KnifeName(set) });
+        items.Add(new("Gloves ›", pl => GloveMenu(pl, rec)) { Value = set.Gloves == 0 ? "default" : GlovesName(set) });
         if (rec == null)
         {
-            items.Add(new("Agent ›", pl => AgentTeamMenu(pl)) { Value = set.AgentT == "" && set.AgentCT == "" ? "default" : "set" });
+            items.Add(new("Agent ›", AgentMenu) { Value = TeamKey(p) is { Length: > 0 } tk && AgentOf(tk) is { Length: > 0 } am ? ModelName(am) : "default" });
             items.Add(new("Bots get my skins", _ => { })
             {
                 Kind = ApiRowKind.Choice, Options = new[] { "Off", "On" }, Selected = _copySkins ? 1 : 0, Value = "new movements",
@@ -537,7 +537,7 @@ public partial class FakeMimic
     void GunsMenu(CCSPlayerController p, string? rec, int page)
     {
         var set = Load(rec);
-        var entries = _guns.Select(g => new MenuItem($"{g.Name} ›", pl => GunPaintsMenu(pl, rec, g, 0))
+        var entries = _guns.Select(g => new MenuItem($"{g.Name} ›", pl => GunMenu(pl, rec, g))
         {
             Value = set.Guns.ContainsKey(g.Def) ? GunValue(set, g) : "",
         }).ToList();
@@ -553,56 +553,97 @@ public partial class FakeMimic
         Say(p, $"{gun.Name}: {(kit == 0 ? "default" : _paintNames.GetValueOrDefault(kit, kit.ToString()))}");
     }
 
-    // the skins of one gun: wear (once it has one), search in them, Default, then the skins.
-    // inHand: opened from "In hand" (Back goes to Skins, not to the list); text: only the skins with it
+    // One gun / the knife / the gloves / the agent: once one is set, its row opens its settings (the skin and
+    // what it is behind their own rows, wear, StatTrak); with nothing set it opens the list to pick from.
+    // A pick in a list comes back to the settings screen.
+    void GunMenu(CCSPlayerController p, string? rec, SkinItem gun, bool inHand = false)
+    {
+        var set = Load(rec);
+        var cur = set.Guns.GetValueOrDefault(gun.Def);
+        if (cur == 0) { GunPaintsMenu(p, rec, gun, 0, inHand); return; }
+        void Again(CCSPlayerController pl) => GunMenu(pl, rec, gun, inHand);
+        Show(p, new Menu($"{gun.Name}: {Whose(rec)}", new List<MenuItem>
+        {
+            new("Skin ›", pl => GunPaintsMenu(pl, rec, gun, 0, inHand)) { Value = _paintNames.GetValueOrDefault(cur, cur.ToString()) },
+            WearRow(set.WearOf(gun.Def), (pl, w) =>
+            {
+                var s = Load(rec); s.GunWear[gun.Def] = w; Save(rec, s);
+                Refresh(rec, x => x.AttributeManager.Item.ItemDefinitionIndex == gun.Def);
+                Again(pl);
+            }),
+            StatRow(set.StatOf(gun.Def), (pl, c) =>
+            {
+                var s = Load(rec);
+                if (c < 0) s.GunStat.Remove(gun.Def); else s.GunStat[gun.Def] = c;
+                Save(rec, s);
+                Refresh(rec, x => x.AttributeManager.Item.ItemDefinitionIndex == gun.Def);
+                Again(pl);
+            }),
+            new("No skin", pl => { SetGun(pl, rec, gun, 0); Again(pl); }, Accent: true),
+        }, Back: inHand ? pl => SkinsMenu(pl, rec) : pl => GunsMenu(pl, rec, 0)));
+    }
+
+    // the skins of one gun: search in them, then the skins. text: only the skins with it
     void GunPaintsMenu(CCSPlayerController p, string? rec, SkinItem gun, int page, bool inHand = false, string text = "")
     {
         var set = Load(rec);
         var cur = set.Guns.GetValueOrDefault(gun.Def);
         void Again(CCSPlayerController pl, int pg) => GunPaintsMenu(pl, rec, gun, pg, inHand, text);
         var entries = new List<MenuItem>();
-        if (cur != 0)
-            entries.Add(WearRow(set.WearOf(gun.Def), (pl, w) =>
-            {
-                var s = Load(rec); s.GunWear[gun.Def] = w; Save(rec, s);
-                Refresh(rec, x => x.AttributeManager.Item.ItemDefinitionIndex == gun.Def);
-                Again(pl, 0);
-            }));
-        if (cur != 0)
-            entries.Add(StatRow(set.StatOf(gun.Def), (pl, c) =>
-            {
-                var s = Load(rec);
-                if (c < 0) s.GunStat.Remove(gun.Def); else s.GunStat[gun.Def] = c;
-                Save(rec, s);
-                Refresh(rec, x => x.AttributeManager.Item.ItemDefinitionIndex == gun.Def);
-                Again(pl, 0);
-            }));
         var paints = Shown(_gunPaints.GetValueOrDefault(gun.Def) ?? new())
             .Where(x => text == "" || x.Shown.Contains(text, StringComparison.OrdinalIgnoreCase)).ToList();
         entries.Add(text == ""
             ? new("Search…", pl => AskText(pl, $"{gun.Name} skin (part of the name)", (pl2, t) => GunPaintsMenu(pl2, rec, gun, 0, inHand, t), raw: true))
             : new($"Search: '{text}' ({paints.Count}) ✕", pl => GunPaintsMenu(pl, rec, gun, 0, inHand)));
-        if (text == "") entries.Add(new("Default", pl => { SetGun(pl, rec, gun, 0); Again(pl, page); }) { On = cur == 0 });
-        entries.AddRange(paints.Select(x => new MenuItem(x.Shown, pl => { SetGun(pl, rec, gun, x.P.Kit); Again(pl, page); }) { On = cur == x.P.Kit }));
-        ShowPaged(p, $"{gun.Name}: {Whose(rec)}", entries, page, Again, inHand ? pl => SkinsMenu(pl, rec) : pl => GunsMenu(pl, rec, 0));
+        entries.AddRange(paints.Select(x => new MenuItem(x.Shown, pl => { SetGun(pl, rec, gun, x.P.Kit); GunMenu(pl, rec, gun, inHand); }) { On = cur == x.P.Kit }));
+        Action<CCSPlayerController> back = cur != 0 ? pl => GunMenu(pl, rec, gun, inHand) : inHand ? pl => SkinsMenu(pl, rec) : pl => GunsMenu(pl, rec, 0);
+        ShowPaged(p, $"{gun.Name}: {Whose(rec)}", entries, page, Again, back);
+    }
+
+    void KnifeMenu(CCSPlayerController p, string? rec)
+    {
+        var set = Load(rec);
+        if (_knives.FirstOrDefault(k => k.Def == set.Knife) is not { } knife) { KnivesMenu(p, rec, 0); return; }
+        void Again(CCSPlayerController pl) => KnifeMenu(pl, rec);
+        var items = new List<MenuItem>
+        {
+            new("Knife ›", pl => KnivesMenu(pl, rec, 0)) { Value = knife.Name },
+            new("Skin ›", pl => KnifePaintsMenu(pl, rec, knife, 0)) { Value = set.KnifePaint == 0 ? "Vanilla" : _paintNames.GetValueOrDefault(set.KnifePaint, "") },
+        };
+        if (set.KnifePaint != 0)
+        {
+            items.Add(WearRow(set.KnifeWear, (pl, w) =>
+            {
+                var s = Load(rec); s.KnifeWear = w; Save(rec, s);
+                Refresh(rec, x => IsKnife(x.DesignerName));
+                Again(pl);
+            }));
+            items.Add(StatRow(set.KnifeStat, (pl, c) =>
+            {
+                var s = Load(rec); s.KnifeStat = c; Save(rec, s);
+                Refresh(rec, x => IsKnife(x.DesignerName));
+                Again(pl);
+            }));
+        }
+        items.Add(new("Standard knife", pl =>
+        {
+            var s = Load(rec); (s.Knife, s.KnifePaint) = (0, 0); Save(rec, s);
+            Refresh(rec, w => IsKnife(w.DesignerName));
+            Say(pl, "knife: standard");
+            SkinsMenu(pl, rec);
+        }, Accent: true));
+        Show(p, new Menu($"Knife: {Whose(rec)}", items, Back: pl => SkinsMenu(pl, rec)));
     }
 
     void KnivesMenu(CCSPlayerController p, string? rec, int page)
     {
         var set = Load(rec);
-        var entries = new List<MenuItem>
-        {
-            new("Default", pl =>
-            {
-                var s = Load(rec); (s.Knife, s.KnifePaint) = (0, 0); Save(rec, s);
-                Refresh(rec, w => IsKnife(w.DesignerName));
-                KnivesMenu(pl, rec, page);
-            }) { On = set.Knife == 0 },
-        };
-        entries.AddRange(_knives.Select(k => new MenuItem($"{k.Name} ›", pl => KnifePaintsMenu(pl, rec, k, 0)) { On = set.Knife == k.Def }));
-        ShowPaged(p, $"Knife: {Whose(rec)}", entries, page, (pl, pg) => KnivesMenu(pl, rec, pg), pl => SkinsMenu(pl, rec));
+        var entries = _knives.Select(k => new MenuItem($"{k.Name} ›", pl => KnifePaintsMenu(pl, rec, k, 0)) { On = set.Knife == k.Def }).ToList();
+        ShowPaged(p, $"Knife: {Whose(rec)}", entries, page, (pl, pg) => KnivesMenu(pl, rec, pg),
+            set.Knife != 0 ? pl => KnifeMenu(pl, rec) : pl => SkinsMenu(pl, rec));
     }
 
+    // the finishes of one knife; a pick sets this knife with it
     void KnifePaintsMenu(CCSPlayerController p, string? rec, SkinItem knife, int page)
     {
         var set = Load(rec);
@@ -611,70 +652,76 @@ public partial class FakeMimic
             var s = Load(rec); (s.Knife, s.KnifePaint) = (knife.Def, kit); Save(rec, s);
             Refresh(rec, w => IsKnife(w.DesignerName));
             Say(pl, $"knife: {KnifeName(s)}");
-            KnifePaintsMenu(pl, rec, knife, page);
+            KnifeMenu(pl, rec);
         }
         var mine = set.Knife == knife.Def;
-        var entries = new List<MenuItem>();
-        if (mine && set.KnifePaint != 0)
-            entries.Add(WearRow(set.KnifeWear, (pl, w) =>
-            {
-                var s = Load(rec); s.KnifeWear = w; Save(rec, s);
-                Refresh(rec, x => IsKnife(x.DesignerName));
-                KnifePaintsMenu(pl, rec, knife, 0);
-            }));
-        if (mine && set.KnifePaint != 0)
-            entries.Add(StatRow(set.KnifeStat, (pl, c) =>
-            {
-                var s = Load(rec); s.KnifeStat = c; Save(rec, s);
-                Refresh(rec, x => IsKnife(x.DesignerName));
-                KnifePaintsMenu(pl, rec, knife, 0);
-            }));
-        entries.Add(new("Vanilla", pl => Pick(pl, 0)) { On = mine && set.KnifePaint == 0 });
+        var entries = new List<MenuItem> { new("Vanilla", pl => Pick(pl, 0)) { On = mine && set.KnifePaint == 0 } };
         // the classic finishes, then the ones made for this knife
         entries.AddRange(Shown(_knifePaints.Where(k => k.Only == "" || k.Only == knife.Weapon))
             .OrderBy(x => x.P.Only == "" ? 0 : 1).ThenBy(x => x.Shown)
             .Select(x => new MenuItem(x.Shown, pl => Pick(pl, x.P.Kit)) { On = mine && set.KnifePaint == x.P.Kit }));
-        ShowPaged(p, knife.Name, entries, page, (pl, pg) => KnifePaintsMenu(pl, rec, knife, pg), pl => KnivesMenu(pl, rec, 0));
+        ShowPaged(p, knife.Name, entries, page, (pl, pg) => KnifePaintsMenu(pl, rec, knife, pg), mine ? pl => KnifeMenu(pl, rec) : pl => KnivesMenu(pl, rec, 0));
     }
 
-    void GlovesMenu(CCSPlayerController p, string? rec)
+    void GloveMenu(CCSPlayerController p, string? rec)
     {
         var set = Load(rec);
-        var entries = new List<MenuItem>
+        if (_gloves.FirstOrDefault(g => g.Def == set.Gloves) is not { } glove) { GlovesMenu(p, rec); return; }
+        Show(p, new Menu($"Gloves: {Whose(rec)}", new List<MenuItem>
         {
-            new("Default", pl =>
+            new("Gloves ›", pl => GlovesMenu(pl, rec)) { Value = glove.Name },
+            new("Skin ›", pl => GlovePaintsMenu(pl, rec, glove, 0)) { Value = _paintNames.GetValueOrDefault(set.GlovesPaint, "") },
+            WearRow(set.GlovesWear, (pl, w) =>
+            {
+                var s = Load(rec); s.GlovesWear = w; Save(rec, s);
+                Refresh(rec, _ => false, gloves: true);
+                GloveMenu(pl, rec);
+            }),
+            new("Standard gloves", pl =>
             {
                 var s = Load(rec); (s.Gloves, s.GlovesPaint) = (0, 0); Save(rec, s);
                 Say(pl, "gloves: the agent's own from the next spawn");
-                GlovesMenu(pl, rec);
-            }) { On = set.Gloves == 0 },
-        };
-        entries.AddRange(_gloves.Select(g => new MenuItem($"{g.Name} ›", pl => GlovePaintsMenu(pl, rec, g, 0)) { On = set.Gloves == g.Def }));
-        ShowPaged(p, $"Gloves: {Whose(rec)}", entries, 0, (pl, _) => GlovesMenu(pl, rec), pl => SkinsMenu(pl, rec));
+                SkinsMenu(pl, rec);
+            }, Accent: true),
+        }, Back: pl => SkinsMenu(pl, rec)));
+    }
+
+    void GlovesMenu(CCSPlayerController p, string? rec, int page = 0)
+    {
+        var set = Load(rec);
+        var entries = _gloves.Select(g => new MenuItem($"{g.Name} ›", pl => GlovePaintsMenu(pl, rec, g, 0)) { On = set.Gloves == g.Def }).ToList();
+        ShowPaged(p, $"Gloves: {Whose(rec)}", entries, page, (pl, pg) => GlovesMenu(pl, rec, pg),
+            set.Gloves != 0 ? pl => GloveMenu(pl, rec) : pl => SkinsMenu(pl, rec));
     }
 
     void GlovePaintsMenu(CCSPlayerController p, string? rec, SkinItem glove, int page)
     {
         var set = Load(rec);
-        var entries = new List<MenuItem>();
-        if (set.Gloves == glove.Def)
-            entries.Add(WearRow(set.GlovesWear, (pl, w) =>
-            {
-                var s = Load(rec); s.GlovesWear = w; Save(rec, s);
-                Refresh(rec, _ => false, gloves: true);
-                GlovePaintsMenu(pl, rec, glove, 0);
-            }));
-        entries.AddRange(Shown(_glovePaints.GetValueOrDefault(glove.Def) ?? new()).Select(x => new MenuItem(x.Shown, pl =>
+        var mine = set.Gloves == glove.Def;
+        var entries = Shown(_glovePaints.GetValueOrDefault(glove.Def) ?? new()).Select(x => new MenuItem(x.Shown, pl =>
         {
             var s = Load(rec); (s.Gloves, s.GlovesPaint) = (glove.Def, x.P.Kit); Save(rec, s);
             Refresh(rec, _ => false, gloves: true);
             Say(pl, $"gloves: {GlovesName(s)}");
-            GlovePaintsMenu(pl, rec, glove, page);
-        }) { On = set.Gloves == glove.Def && set.GlovesPaint == x.P.Kit }));
-        ShowPaged(p, glove.Name, entries, page, (pl, pg) => GlovePaintsMenu(pl, rec, glove, pg), pl => GlovesMenu(pl, rec));
+            GloveMenu(pl, rec);
+        }) { On = mine && set.GlovesPaint == x.P.Kit }).ToList();
+        ShowPaged(p, glove.Name, entries, page, (pl, pg) => GlovePaintsMenu(pl, rec, glove, pg), mine ? pl => GloveMenu(pl, rec) : pl => GlovesMenu(pl, rec));
     }
 
-    // your agent: one for each team (the bots' models are in Movements › a movement › Play on a bot)
+    // your agent: one for each team (the bots' models are in Movements › a movement › Play on a bot).
+    // Agent › opens the team you play now: its agent marked among its faction's variants, or the factions
+    static string TeamKey(CCSPlayerController p) => p.TeamNum == 2 ? "t" : p.TeamNum == 3 ? "ct" : "";
+
+    string AgentOf(string team) => team == "t" ? _you.AgentT : _you.AgentCT;
+
+    void AgentMenu(CCSPlayerController p)
+    {
+        var team = TeamKey(p);
+        if (team == "") AgentTeamMenu(p);
+        else if (AgentOf(team) is { Length: > 0 } m) AgentVariantsMenu(p, team, FactionOf(m));
+        else AgentFactionsMenu(p, team);
+    }
+
     void AgentTeamMenu(CCSPlayerController p)
     {
         Show(p, new Menu("Your agent", new List<MenuItem>
@@ -691,27 +738,30 @@ public partial class FakeMimic
         Save(null, s);
         if (model == "") Say(p, "agent: the map's own from the next spawn");
         else { PutAgent(p); Say(p, $"agent ({team.ToUpper()}): {ModelName(model)}"); }
-        AgentTeamMenu(p);
+        if (model == "") AgentFactionsMenu(p, team); else AgentVariantsMenu(p, team, FactionOf(model));
     }
 
     void AgentFactionsMenu(CCSPlayerController p, string team)
     {
         var teamNum = team == "t" ? 2 : 3;
+        var cur = AgentOf(team);
         var cards = new List<(ApiCard, Action<CCSPlayerController>)> { (new ApiCard(DefaultPortrait, teamNum, "Default", "map's own"), pl => SetAgent(pl, team, "")) };
         foreach (var f in _models.Select(FactionOf).Distinct().Where(f => FactionFits(f, team)))
         {
             var variants = _models.Where(m => FactionOf(m) == f).ToList();
             cards.Add((new ApiCard(variants[0], teamNum, FactionName(f), $"{variants.Count} variants"), pl => AgentVariantsMenu(pl, team, f)));
         }
-        Show(p, new Menu($"Your {(team == "t" ? "T" : "CT")} agent", CardRows(cards), Back: AgentTeamMenu));
+        Show(p, new Menu($"Your {(team == "t" ? "T" : "CT")} agent", CardRows(cards,
+            c => cur == "" ? c.Model == DefaultPortrait : c.Model != DefaultPortrait && FactionOf(c.Model) == FactionOf(cur)), Back: AgentTeamMenu));
     }
 
     void AgentVariantsMenu(CCSPlayerController p, string team, string faction)
     {
         var teamNum = team == "t" ? 2 : 3;
+        var cur = AgentOf(team);
         var cards = _models.Where(m => FactionOf(m) == faction)
             .Select(m => (new ApiCard(m, teamNum, ModelName(m), ""), (Action<CCSPlayerController>)(pl => SetAgent(pl, team, m)))).ToList();
-        Show(p, new Menu(FactionName(faction), CardRows(cards), Back: pl => AgentFactionsMenu(pl, team)));
+        Show(p, new Menu(FactionName(faction), CardRows(cards, c => c.Model == cur), Back: pl => AgentFactionsMenu(pl, team)));
     }
 
     [ConsoleCommand("fm_skins", "fm_skins - your skins menu")]

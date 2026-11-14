@@ -1,4 +1,4 @@
-// FakeMimic - Bot Mimic for CS2 fake demos.
+﻿// FakeMimic - Bot Mimic for CS2 fake demos.
 // Records the local player and replays recordings on bots, all starting on the same tick,
 // so enemies come out exactly on time. Recording and replay run on CS2-Bot-Controller
 // (engine level: movement, view, buttons incl. shooting, subtick input); FakeMimic adds
@@ -48,12 +48,14 @@ public class Recording
     // and interpolation, so the bot's bullets spread like the player's and the server rewinds the others
     // the way the player saw them. Empty for older recordings: the bot then shoots with its own spread.
     public byte[] History = Array.Empty<byte>();
+    // the player's health and armor when the recording started: the bot gets the same ("HPAR" section)
+    public int Health = 100, Armor;
 
     // FMR2 = FMR1 + the byte size of each CS2-Bot-Controller struct, so a recording made with
     // another BotController version is refused instead of replaying garbage. Optional sections follow at
     // the end, each after its mark: "BUYS" (purchases), then "HIST" (input history). Older FakeMimic
     // versions stop reading at the first mark they do not know.
-    const string Magic = "FMR2", MagicV1 = "FMR1", BuysMark = "BUYS", HistoryMark = "HIST";
+    const string Magic = "FMR2", MagicV1 = "FMR1", BuysMark = "BUYS", HistoryMark = "HIST", HealthMark = "HPAR";
 
     static int[] StructSizes() => [Unsafe.SizeOf<ReplayTick>(), Unsafe.SizeOf<SubtickMove>(), Unsafe.SizeOf<ReplayCommandFrame>()];
 
@@ -80,6 +82,9 @@ public class Recording
             w.Write(History.Length);
             w.Write(History);
         }
+        w.Write(HealthMark);
+        w.Write(Health);
+        w.Write(Armor);
     }
 
     public static Recording Load(string path)
@@ -105,6 +110,7 @@ public class Recording
             if (mark == BuysMark)
                 for (int i = r.ReadInt32(); i > 0; i--) rec.Buys.Add((r.ReadInt32(), r.ReadString()));
             else if (mark == HistoryMark) rec.History = r.ReadBytes(r.ReadInt32());
+            else if (mark == HealthMark) (rec.Health, rec.Armor) = (r.ReadInt32(), r.ReadInt32());
             else break;   // a section of a newer FakeMimic
         }
         return rec;
@@ -191,7 +197,9 @@ public partial class FakeMimic : BasePlugin
 
     public override void Load(bool hotReload)
     {
-        RegisterListener<Listeners.OnTick>(OnTick);
+        _perf = new PerfLog("fm", "bots,playing,entities", () =>
+            $"{FakeDemoPlayers.All().Count(p => p is { IsValid: true, IsBot: true, IsHLTV: false })},{_replays.Count(r => r.Running)},{Utilities.GetAllEntities().Count()}");
+        RegisterListener<Listeners.OnTick>(() => { _perf.Begin(); try { OnTick(); } finally { _perf.End(); } });
         RegisterListener<Listeners.OnMapStart>(_ =>
         {
             _recName = null; _replays.Clear(); _menu = null; _hud = null;
@@ -247,9 +255,7 @@ public partial class FakeMimic : BasePlugin
     // weapon fixed), and a bot that reached the end is frozen in place (otherwise its AI walks away)
     void OnTick()
     {
-        CheckOverlay();
-        WaitCapture();
-        ShowGiven();
+        PerfSpikes.Time("fm", "menu", () => { CheckOverlay(); WaitCapture(); ShowGiven(); });
         if (_bc == null) return;
         foreach (var r in _replays)
         {
@@ -266,7 +272,7 @@ public partial class FakeMimic : BasePlugin
                 if (r.BrakeTo >= 0) { Pause(r, r.BrakeTo); continue; }   // braked to a stop in front of a player
                 r.Running = false;
                 r.Ended = true;
-                OnReplayEnd(r);
+                PerfSpikes.Time("fm", $"replay end / loop restart ({r.Name})", () => OnReplayEnd(r));
                 continue;
             }
             if (_collide && (r.BrakeTo < 0 ? CheckCollision(r) : StopBraking(r))) continue;
@@ -276,9 +282,13 @@ public partial class FakeMimic : BasePlugin
             if (r.NextBuy < r.Buys.Count)
             {
                 var at = Cursor(r) + BuyLeadTicks;
-                while (r.NextBuy < r.Buys.Count && r.Buys[r.NextBuy].Tick <= at) Buy(r.Bot, r.Buys[r.NextBuy++].Item);
+                while (r.NextBuy < r.Buys.Count && r.Buys[r.NextBuy].Tick <= at)
+                {
+                    var item = r.Buys[r.NextBuy++].Item;
+                    PerfSpikes.Time("fm", $"bot buys {item}", () => Buy(r.Bot, item));
+                }
             }
-            KeepWeapon(r, slot);
+            PerfSpikes.Time("fm", "bot weapon check", () => KeepWeapon(r, slot));
         }
     }
 
@@ -388,6 +398,22 @@ public partial class FakeMimic : BasePlugin
     int _recStartTick;
     List<(int Tick, string Item)>? _recBuys;
 
+    // endless money: 65535 is the game's ceiling, so the account is topped up after every purchase
+    [GameEventHandler]
+    public HookResult OnPurchaseRefill(EventItemPurchase ev, GameEventInfo info)
+    {
+        if (ev.Userid is { IsValid: true, IsBot: false } p)
+            Server.NextFrame(() =>
+            {
+                if (p.IsValid && p.InGameMoneyServices is { } m)
+                {
+                    m.Account = 65535;
+                    Utilities.SetStateChanged(p, "CCSPlayerController", "m_pInGameMoneyServices");
+                }
+            });
+        return HookResult.Continue;
+    }
+
     [GameEventHandler]
     public HookResult OnPurchase(EventItemPurchase ev, GameEventInfo info)
     {
@@ -476,7 +502,8 @@ public partial class FakeMimic : BasePlugin
     string PathOf(string name) => Path.Combine(MapDir, name + Ext);
 
     IEnumerable<string> Names() =>
-        Directory.GetFiles(MapDir, "*" + Ext).Select(Path.GetFileNameWithoutExtension).OfType<string>().Order();
+        Directory.GetFiles(MapDir, "*" + Ext).OrderByDescending(File.GetCreationTimeUtc)   // newest first (a rename keeps the date)
+            .Select(Path.GetFileNameWithoutExtension).OfType<string>();
 
     string NextName()
     {
@@ -495,6 +522,7 @@ public partial class FakeMimic : BasePlugin
         if (p == null || pawn == null || !p.PawnIsAlive) return "you must be alive";
 
         _recWeapons = pawn.WeaponServices!.MyWeapons.Select(h => h.Value).Where(w => w is { IsValid: true }).Select(w => ItemOf(w!)).ToList();
+        (_recHealth, _recArmor) = (Math.Max(1, pawn.Health), pawn.ArmorValue);
         if (!_bc.SetReplayPawn(p.Slot, pawn.Handle) || !_bc.StartRecord(p.Slot)) return "recording did not start";
         _recName = name;
         _recStartTick = Server.TickCount;
@@ -513,15 +541,72 @@ public partial class FakeMimic : BasePlugin
         var rec = new Recording
         {
             Team = _recPlayer.TeamNum, Weapons = _recWeapons ?? new(), Ticks = ticks, Subs = subs, Commands = commands,
-            Buys = _recBuys ?? new(), History = _bc.GetRecordedInputHistory(slot),
+            Buys = _recBuys ?? new(), History = _bc.GetRecordedInputHistory(slot), Health = _recHealth, Armor = _recArmor,
         };
         rec.Save(PathOf(_recName));
-        var skins = RememberSkins(_recName);
+        // re-recorded: the movement keeps its settings and skins; the old path's move / turn no longer fits it
+        var again = _overwrite == _recName;
+        if (again)
+        {
+            var e = EditsOf(_recName);
+            (e.Dx, e.Dy, e.Dz, e.Yaw) = (0, 0, 0, 0);
+            e.Save(EditsPathOf(_recName));
+        }
+        var skins = again ? "" : RememberSkins(_recName);
         var msg = $"saved '{_recName}': {rec.Seconds:0.0} s" + (rec.Buys.Count > 0 ? $", {rec.Buys.Count} purchase(s)" : "") + skins;
         _recBuys = null;
         _api?.RaiseRecording(_recName, false);
+        var name = _recName;
         _recName = null;
+        EndOverwrite();
+        if (again) Reload(name);
         return msg;
+    }
+
+    // the health and armor the recording started with (an older recording: 100, none)
+    static void SetHealth(CCSPlayerController bot, int health, int armor)
+    {
+        if (bot.PlayerPawn.Value is not { IsValid: true } pawn) return;
+        pawn.Health = health;
+        pawn.ArmorValue = armor;
+        Utilities.SetStateChanged(pawn, "CBaseEntity", "m_iHealth");
+        Utilities.SetStateChanged(pawn, "CCSPlayerPawn", "m_ArmorValue");
+    }
+
+    // Cancel (F7, the menu) or the player died: nothing is saved
+    string CancelRec(string why)
+    {
+        if (_recName == null || _bc == null) return "not recording";
+        _bc.StopRecord(_recPlayer!.Slot);
+        _recBuys = null;
+        _api?.RaiseRecording(_recName, false);
+        var name = _recName;
+        _recName = null;
+        EndOverwrite();
+        return $"'{name}' {why}: not saved";
+    }
+
+    // re-recording a movement: its own bot is taken out of the run (it would play the old path) and back after
+    string? _overwrite;
+    Replay? _parked;
+    int _recHealth = 100, _recArmor;
+
+    void EndOverwrite()
+    {
+        if (_parked != null && _parked.Bot is { IsValid: true }) _replays.Add(_parked);
+        (_overwrite, _parked) = (null, null);
+    }
+
+    void ReRecord(CCSPlayerController p, string name)
+    {
+        if (_recName != null || _take != null) { Say(p, "stop the recording first"); return; }
+        _overwrite = name;
+        _parked = _replays.FirstOrDefault(r => r.Name == name);
+        if (_parked != null) _replays.Remove(_parked);
+        var msg = _replays.Count > 0 ? RecordOver(name) : StartRec(name) + " H > 1 to save, F7 to cancel";
+        if (_recName == null && _replays.Count == 0) EndOverwrite();   // did not start
+        Say(p, $"re-recording '{name}' (its settings and skins stay): {msg}");
+        if (_menu != null) CloseMenu(p);
     }
 
     // adds a bot of the team; the result arrives later through report
@@ -537,6 +622,11 @@ public partial class FakeMimic : BasePlugin
             var bot = FakeDemoPlayers.All().FirstOrDefault(p => p.IsBot && !p.IsHLTV && !before.Contains(p.Slot));
             if (bot == null) { report("bot was not added"); return; }
             _bc?.Lock(bot.Slot, LockKind.All);   // stands still until fm_go
+            // the movement had a bot (another model or team picked while it plays): that bot goes, or it
+            // stayed on the map as a plain bot running around by itself
+            var old = _replays.Where(x => x.Name == name && x.Bot is { IsValid: true } && x.Bot != bot).Select(x => x.Bot!).ToList();
+            foreach (var o in old) _bc?.StopReplay(o.Slot);
+            if (old.Count > 0) Kick(old);
             _replays.RemoveAll(x => x.Name == name);
             _replays.Add(new Replay { Name = name, Rec = rec, Edits = EditsOf(name), Bot = bot });
             report($"{bot.PlayerName} ({team.ToUpper()}) plays '{name}'");
@@ -547,6 +637,9 @@ public partial class FakeMimic : BasePlugin
     // Weapons go on after the model has settled: given in the respawn tick, holstered weapons sat
     // wrong on a T bot playing a CT recording until it dropped and picked them up again.
     const float ModelDelay = 0.2f, WeaponsDelay = 0.35f, StartDelay = 0.5f;
+    // 16 bots, 2 a tick: the last ones get theirs 8 ticks (0.125 s) after WeaponsDelay, still before StartDelay
+    const int WeaponBotsPerTick = 2;
+    const float TickSeconds = 1 / 64f;
 
     // ---------------- playing: once or in a loop ----------------
     // A setting of the start, not of a movement: in a loop every bot starts again together, after the
@@ -622,25 +715,35 @@ public partial class FakeMimic : BasePlugin
         _starting = true;
         _replays.RemoveAll(r => r.Bot is not { IsValid: true });
         ClearPaths();
-        ClearMap();   // the map as it was before the last run
-        foreach (var r in _replays)
+        PerfSpikes.Time("fm", "start: clear map", ClearMap);   // the map as it was before the last run
+        var bc = _bc;
+        PerfSpikes.Time("fm", "start: respawn bots", () =>
         {
-            _bc.StopReplay(r.Bot!.Slot);
-            r.Running = false;
-            (r.PausedAt, r.BrakeTo) = (-1, -1);
-            r.Bot.Respawn();
-            _bc.Lock(r.Bot.Slot, LockKind.All);   // stands at the spawn until the start
-        }
-        var replays = _replays.ToList();
-        AddTimer(ModelDelay, () => { foreach (var r in replays) { ApplyModel(r.Bot!, r.Edits); ApplySkins(r.Bot!, r.Edits); } });
-        AddTimer(WeaponsDelay, () =>
-        {
-            foreach (var r in replays.Where(r => r.Bot is { IsValid: true }))
+            foreach (var r in _replays)
             {
-                r.Bot!.RemoveWeapons();
-                foreach (var w in r.Rec.Weapons) GiveItem(r.Bot, w);
+                bc.StopReplay(r.Bot!.Slot);
+                r.Running = false;
+                (r.PausedAt, r.BrakeTo) = (-1, -1);
+                r.Bot.Respawn();
+                bc.Lock(r.Bot.Slot, LockKind.All);   // stands at the spawn until the start
             }
         });
+        var replays = _replays.ToList();
+        AddTimer(ModelDelay, () => PerfSpikes.Time("fm", "start: models and skins", () => { foreach (var r in replays) { ApplyModel(r.Bot!, r.Edits); ApplySkins(r.Bot!, r.Edits); } }));
+        // two bots a tick: every bot's weapons with skins in one tick took up to 61 ms (a stutter at each loop start)
+        for (var i = 0; i < replays.Count; i += WeaponBotsPerTick)
+        {
+            var group = replays.Skip(i).Take(WeaponBotsPerTick).ToList();
+            AddTimer(WeaponsDelay + i / WeaponBotsPerTick * TickSeconds, () => PerfSpikes.Time("fm", "start: weapons", () =>
+            {
+                foreach (var r in group.Where(r => r.Bot is { IsValid: true }))
+                {
+                    r.Bot!.RemoveWeapons();
+                    foreach (var w in r.Rec.Weapons) GiveItem(r.Bot, w);
+                    SetHealth(r.Bot, r.Rec.Health, r.Rec.Armor);
+                }
+            }));
+        }
         AddTimer(StartDelay, () =>
         {
             _starting = false;
@@ -659,7 +762,9 @@ public partial class FakeMimic : BasePlugin
                     Server.PrintToConsole($"[FM] replay '{r.Name}' did not load on {bot.PlayerName}");
                     continue;
                 }
+                var load = System.Diagnostics.Stopwatch.StartNew();
                 var withHistory = rec.History.Length > 0 && _bc.LoadReplay(bot.Slot, rec.Ticks, rec.Subs, rec.Commands, rec.History);
+                PerfSpikes.Note("fm", $"start: load replay '{r.Name}' ({rec.Ticks.Length} ticks)", load.Elapsed.TotalMilliseconds);
                 if (!withHistory && !_bc.LoadReplay(bot.Slot, rec.Ticks, rec.Subs, rec.Commands))
                 {
                     Server.PrintToConsole($"[FM] replay '{r.Name}' did not load on {bot.PlayerName}");
@@ -794,7 +899,7 @@ public partial class FakeMimic : BasePlugin
     record Menu(string Title, List<MenuItem> Items, bool Main = false, Action<CCSPlayerController>? Back = null);
 
     const int RowOptions = 5;   // segments (stars) per row in the layout
-    const int RowSwatches = 4;  // colour swatches per row
+    const int RowSwatches = 5;  // colour swatches per row
     const int RowCards = 4;     // portrait cards per row
 
     Menu? _menu;
@@ -1367,7 +1472,7 @@ public partial class FakeMimic : BasePlugin
             },
         };
         if (_take != null)
-            items.Add(new($"Stop demo '{_take}'", pl => { Say(pl, StopTake()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
+            items.Add(new($"Stop and save demo '{_take}'", pl => { Say(pl, StopTake()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
         else if (_recName != null)
             items.Add(new($"Stop and save '{_recName}'", pl => { Say(pl, StopRec()); MainMenu(pl); }, Accent: true) { Kind = ApiRowKind.Primary, Value = "REC" });
         else
@@ -1406,24 +1511,41 @@ public partial class FakeMimic : BasePlugin
                 MainMenu(pl);
             },
         });
-        items.Add(new("Clear assignments", pl => { Say(pl, Clear()); MainMenu(pl); }));
-        if (_take == null)
-            items.Add(new("Record demo (bots play)", pl => Say(pl, StartTake())));
+        items.Add(new("God mode", _ => { })
+        {
+            Kind = ApiRowKind.Choice, Options = GodNames, Selected = _god, Value = "T",
+            Choose = (pl, i) => { SetGod(pl, i); MainMenu(pl); },
+        });
+        // while something records, its Cancel takes this row (a demo cannot start then anyway)
+        if (_take != null)
+            items.Add(new($"Cancel demo (delete it)", pl => { Say(pl, CancelTake("cancelled")); MainMenu(pl); }, Accent: true) { Value = "F7" });
+        else if (_recName != null)
+            items.Add(new($"Cancel '{_recName}' (don't save)", pl => { Say(pl, CancelRec("cancelled")); MainMenu(pl); }, Accent: true) { Value = "F7" });
         else
-            items.Add(new("Demo is recording", pl => { Say(pl, StopTake()); MainMenu(pl); }) { Value = "REC", On = true });
+            items.Add(new("Record demo (bots play)", pl => Say(pl, StartTake())));
 
         // modules (FakeDirector, FakeWallhack, ...): one row each, each opens its own screen;
         // more than fit go behind one "Modules" row
         var free = 8 - items.Count;
-        var modules = _addonItems.Count <= free ? _addonItems.Select(a => FromApi(a())).ToList() : new() { new("Modules ›", ModulesMenu) };
+        var rows = AddonRows();
+        var modules = rows.Count <= free ? rows : new() { new("Modules ›", ModulesMenu) };
         if (modules.Count > 0) modules[0] = modules[0] with { Divider = true };
         items.AddRange(modules);
         Show(p, new Menu("FakeMimic", items, Main: true));
     }
 
+    // a row of a module that was unloaded (hot reload) throws: left out instead of breaking the screen
+    List<MenuItem> AddonRows()
+    {
+        var rows = new List<MenuItem>();
+        foreach (var a in _addonItems.ToList())
+            try { rows.Add(FromApi(a())); } catch (Exception) { _addonItems.Remove(a); }
+        return rows;
+    }
+
     void ModulesMenu(CCSPlayerController p)
     {
-        var items = _addonItems.Take(8).Select(a => FromApi(a())).ToList();
+        var items = AddonRows().Take(8).ToList();
         Show(p, new Menu("Modules", items, Back: MainMenu));
     }
 
@@ -1549,11 +1671,16 @@ public partial class FakeMimic : BasePlugin
 
     string RecordingsTitle => $"Movements in {_category}";
 
-    void RecordingsMenu(CCSPlayerController p)
+    // the page is remembered: back from a movement's screen returns to the same page
+    int _recPage;
+    void RecordingsMenu(CCSPlayerController p) => RecordingsMenu(p, _recPage);
+
+    void RecordingsMenu(CCSPlayerController p, int page)
     {
-        var items = Names().Take(7).Select(n => new MenuItem(Describe(n), pl => RecordingMenu(pl, n))).ToList();
-        items.Add(new("← Back", MainMenu));
-        Show(p, new Menu(RecordingsTitle, items));
+        _recPage = page;
+        var entries = Names().Select(n => new MenuItem(Describe(n), pl => RecordingMenu(pl, n))).ToList();
+        entries.Insert(0, new("Clear assignments", pl => { Say(pl, Clear()); RecordingsMenu(pl); }) { Divider = true });
+        ShowPaged(p, RecordingsTitle, entries, page, RecordingsMenu, MainMenu);
     }
 
     // something finished later (a bot joined, bots started): update the screen in place if it is still open
@@ -1573,6 +1700,7 @@ public partial class FakeMimic : BasePlugin
             new("Skins of its bot ›", pl => SkinsMenu(pl, name)) { Value = EditsOf(name).Skins == "" ? "" : "on" },
             new($"Timing: {DescribeOffset(EditsOf(name).OffsetTicks)}", pl => TimingMenu(pl, name)),
             new("Path and death", pl => PathMenu(pl, name)),
+            new("Re-record (keep settings, skins)", pl => ReRecord(pl, name)),
             new("Rename", pl => AskText(pl, "new name", (pl2, n) => { Say(pl2, Rename(name, n)); RecordingsMenu(pl2); })),
             new("Delete", pl => { Say(pl, Delete(name)); RecordingsMenu(pl); }, Accent: true),
             new("← Back", RecordingsMenu),
@@ -1655,6 +1783,37 @@ public partial class FakeMimic : BasePlugin
         if (_replays.Count > 0) { Tell(caller, $"REC {name}", RecordOver(name)); return; }
         var msg = StartRec(name);
         Tell(caller, _recName != null ? $"REC {name}" : "Not recording", msg);
+    }
+
+    [ConsoleCommand("fm_cancel", "fm_cancel - cancel the movement or demo being recorded (nothing is saved)")]
+    public void CmdCancel(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        if (_recName != null) Tell(caller, "Movement cancelled", CancelRec("cancelled"));
+        else if (_take != null) Tell(caller, "Demo cancelled", CancelTake("cancelled"));
+        else Tell(caller, "Not recording", "nothing is recording");
+    }
+
+    // ---------------- lag check (F6) ----------------
+    // fm_lag: the launcher sees the line in perf\marks.txt, writes perf\lag_<time>.txt with the likely
+    // causes and sends them back with fm_note
+    PerfLog _perf = null!;
+
+    [ConsoleCommand("fm_lag", "fm_lag - mark a lag: the launcher looks at the last 30 s and names likely causes")]
+    public void CmdLag(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        try
+        {
+            Directory.CreateDirectory(FakeDemoPaths.Perf);
+            File.AppendAllText(Path.Combine(FakeDemoPaths.Perf, "marks.txt"), DateTime.Now.ToString("HH:mm:ss") + "\n");
+        }
+        catch (Exception e) { Server.PrintToConsole($"[FM] lag mark not written: {e.Message}"); return; }
+        if ((caller ?? LocalHuman()) is { } p) Say(p, "lag marked, the launcher looks at the last 30 s...");
+    }
+
+    [ConsoleCommand("fm_note", "fm_note <text> - a line in your chat (the launcher's lag check)")]
+    public void CmdNote(CCSPlayerController? caller, CommandInfo cmd)
+    {
+        if ((caller ?? LocalHuman()) is { } p) Say(p, cmd.ArgString.Trim().Trim('"'));
     }
 
     [ConsoleCommand("fm_bots", "fm_bots - start the assigned bots (Once / Loop as set) or stop them")]

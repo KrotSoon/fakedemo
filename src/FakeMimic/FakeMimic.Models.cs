@@ -1,4 +1,4 @@
-// Character model for the bot that plays a recording.
+﻿// Character model for the bot that plays a recording.
 // models.txt (next to the plugin) lists the agent models under agents/models/ in pak01_dir.vpk (the old
 // characters/models/ copies render as error cubes); regenerate it with
 // src/list_models.py after a CS2 update adds agents. All of them are precached on map load so a bot
@@ -102,10 +102,11 @@ public partial class FakeMimic
     }
 
     // portraits, four to a row (rows without a heading); a click picks
-    static List<MenuItem> CardRows(IList<(ApiCard Card, Action<CCSPlayerController> Pick)> cards) =>
+    // picked: the card shown selected (the current agent / model)
+    static List<MenuItem> CardRows(IList<(ApiCard Card, Action<CCSPlayerController> Pick)> cards, Func<ApiCard, bool>? picked = null) =>
         cards.Chunk(RowCards).Select(row => new MenuItem("", _ => { })
         {
-            Kind = ApiRowKind.Cards, Selected = -1, Cards = row.Select(c => c.Card).ToList(),
+            Kind = ApiRowKind.Cards, Selected = picked == null ? -1 : Array.FindIndex(row, c => picked(c.Card)), Cards = row.Select(c => c.Card).ToList(),
             Choose = (pl, i) => row[i].Pick(pl),
         }).Take(8).ToList();
 
